@@ -501,6 +501,14 @@ code, kbd, .eyebrow { font-family: "Cascadia Code", "SFMono-Regular", Consolas, 
 .root-list { display: grid; gap: 7px; }
 .root-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) 58px 34px 34px; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; }
 .root-icon { display: grid; place-items: center; width: 34px; height: 34px; color: #4e5c72; background: #edf0f4; }
+.root-icon span { font-size: 10px; font-weight: 800; letter-spacing: -.03em; }
+.root-tool-cursor { color: #fff; background: #111827; }
+.root-tool-claude-code { color: #3b2415; background: #f0dfc9; }
+.root-tool-codex { color: #fff; background: #1b9b78; }
+.root-tool-workbuddy { color: #fff; background: #5c63d8; }
+.root-tool-windsurf, .root-tool-trae, .root-tool-trae-cn { color: #fff; background: #3478f6; }
+.root-tool-openclaw, .root-tool-hermes, .root-tool-qclaw, .root-tool-easyclaw, .root-tool-autoclaw { color: #fff; background: #d97706; }
+.root-tool-github-copilot { color: #fff; background: #24292f; }
 .root-claude { color: #8d4e31; background: #f4e7df; }
 .root-workbuddy { color: #126d5c; background: var(--teal-soft); }
 .root-main { min-width: 0; }

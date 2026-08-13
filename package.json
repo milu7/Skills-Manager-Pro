@@ -1,6 +1,6 @@
 {
-  "name": "skill-workbench",
-  "productName": "Skill 管理工作台",
+  "name": "skills-manager-pro",
+  "productName": "Skills Manager Pro",
   "version": "0.1.8",
   "description": "跨 Codex、Claude 与 WorkBuddy 的本地 Skill 管理工作台",
   "main": ".webpack/main",
@@ -9,6 +9,7 @@
     "start": "electron-forge start",
     "build": "electron-forge package",
     "make": "electron-forge make --platform=win32 --arch=x64 && node scripts/make-squirrel.mjs",
+    "make:portable": "npm.cmd run make && node scripts/make-portable.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

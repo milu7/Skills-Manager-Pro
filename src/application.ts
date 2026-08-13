@@ -86,7 +86,7 @@ function createWindow(): BrowserWindow {
     minHeight: 720,
     show: false,
     backgroundColor: '#F2F5F7',
-    title: 'Skill 管理工作台',
+    title: 'Skills Manager Pro',
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       nodeIntegration: false,

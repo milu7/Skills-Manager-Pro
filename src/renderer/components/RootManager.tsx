@@ -1,6 +1,7 @@
 import { Folder, FolderPlus, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { HOST_LABELS, SOURCE_LABELS } from '../../shared/constants';
+import { AI_TOOL_BY_NAME } from '../../shared/ai-tool-catalog';
 import type { SkillRoot } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
 import { IconButton, Modal, StatusPill, formatDate } from './common';
@@ -29,7 +30,7 @@ export function RootManager({ open, onOpenChange }: { open: boolean; onOpenChang
       <div className="root-list">
         {roots.map((root) => (
           <div className="root-row" key={root.id}>
-            <div className={`root-icon root-${root.host}`}><Folder size={18} /></div>
+            <div className={`root-icon root-${root.host} ${toolClass(root.label)}`} title="已自动匹配工具图标"><span>{toolMark(root.label)}</span></div>
             <div className="root-main"><div><strong>{root.label}</strong>{root.discovered && <StatusPill tone="blue">自动发现</StatusPill>}{!root.writable && <StatusPill>只读</StatusPill>}</div><p>{root.path}</p><span>{HOST_LABELS[root.host]} · {SOURCE_LABELS[root.sourceType]} · 上次扫描 {formatDate(root.lastScannedAt)}</span></div>
             <b className="root-count">{root.skillCount}<small>Skills</small></b>
             <IconButton label="在资源管理器中打开" onClick={() => void window.workbench.app.openPath(root.path)}><Folder size={16} /></IconButton>
@@ -39,4 +40,16 @@ export function RootManager({ open, onOpenChange }: { open: boolean; onOpenChang
       </div>
     </Modal>
   );
+}
+
+function toolClass(label: string): string {
+  const tool = AI_TOOL_BY_NAME.get(label.replace(/ Skills$/, '').toLocaleLowerCase('en-US'));
+  return tool ? `root-tool-${tool.key.replace(/_/g, '-')}` : '';
+}
+
+function toolMark(label: string): string {
+  const name = label.replace(/ Skills$/, '');
+  const tool = AI_TOOL_BY_NAME.get(name.toLocaleLowerCase('en-US'));
+  if (!tool) return 'AI';
+  return tool.displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 }

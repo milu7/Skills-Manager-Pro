@@ -14,7 +14,7 @@ const stagingApp = path.join(stagingRoot, 'app');
 const stagingOutput = path.join(stagingRoot, 'output');
 
 try {
-  await fs.access(path.join(packagedApp, 'SkillWorkbench.exe'));
+  await fs.access(path.join(packagedApp, 'SkillsManagerPro.exe'));
   // Squirrel's legacy resource editor cannot reliably load files from paths
   // containing CJK characters. Keep all of its inputs and outputs in an ASCII
   // temporary path, then copy only the finished artifacts back to the project.
@@ -22,14 +22,14 @@ try {
   await createWindowsInstaller({
     appDirectory: stagingApp,
     outputDirectory: stagingOutput,
-    name: 'skill_workbench',
-    title: 'Skill 管理工作台',
+    name: 'skills_manager_pro',
+    title: 'Skills Manager Pro',
     authors: packageJson.author,
     owners: packageJson.author,
     description: '本地 Skill 管理、分析与安全编辑工作台',
     version: packageJson.version,
-    exe: 'SkillWorkbench.exe',
-    setupExe: 'Skill-Workbench-Setup.exe',
+    exe: 'SkillsManagerPro.exe',
+    setupExe: 'Skills-Manager-Pro-Setup.exe',
     noMsi: true,
     noDelta: true,
     usePackageJson: false

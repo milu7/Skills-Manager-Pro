@@ -47,9 +47,9 @@ export function TopBar({ onManageRoots }: { onManageRoots(): void }) {
 
   return (
     <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('skills')} aria-label="Skill 管理工作台首页">
+          <button className="brand" type="button" onClick={() => setView('skills')} aria-label="Skills Manager Pro 首页">
         <span className="brand-copy">
-          <span className="brand-title"><strong>Skill 管理工作台</strong>{version && <span className="brand-version"><i />v{version}</span>}</span>
+          <span className="brand-title"><strong>Skills Manager Pro</strong>{version && <span className="brand-version"><i />v{version}</span>}</span>
           <span className="brand-meta"><small>暴论哥3.0（公众号同名）</small></span>
         </span>
       </button>

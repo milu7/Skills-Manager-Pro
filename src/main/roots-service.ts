@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { HostPlatform, SkillRoot, SkillScope, SkillSourceType } from '../shared/types';
 import type { DatabaseContext } from './db/database';
-import { createId, normalizeFsPath, nowIso, pathExists } from './utils';
+import { createId, localizeMessage, normalizeFsPath, nowIso, pathExists, type MessageTranslator } from './utils';
 import { AI_TOOL_LOCATIONS } from '../shared/ai-tool-catalog';
 
 interface RootSeed {
@@ -21,7 +21,8 @@ interface RootSeed {
 export class RootsService {
   constructor(
     private readonly database: DatabaseContext,
-    private readonly userDataPath: string
+    private readonly userDataPath: string,
+    private readonly translate?: MessageTranslator
   ) {}
 
   async initializeDefaults(): Promise<void> {
@@ -38,9 +39,6 @@ export class RootsService {
       { label: '工作台回收站', path: path.join(this.userDataPath, 'trash'), host: 'custom', scope: 'system', sourceType: 'trash', writable: false, recursive: true, discovered: true, always: true }
     ];
 
-    // Keep the original roots above for backwards compatibility, then add
-    // every adapter location. A root is useful when either the software's
-    // marker directory or its Skills directory exists.
     for (const tool of AI_TOOL_LOCATIONS) {
       const detectPath = path.join(home, ...tool.detectDir.split('/'));
       const skillsPath = path.join(home, ...tool.skillsDir.split('/'));
@@ -79,7 +77,7 @@ export class RootsService {
   async add(rootPath: string): Promise<SkillRoot[]> {
     const resolved = path.resolve(rootPath.trim());
     const stat = await fs.stat(resolved).catch(() => null);
-    if (!stat?.isDirectory()) throw new Error('请选择存在的目录');
+    if (!stat?.isDirectory()) throw new Error(localizeMessage(this.translate, 'error.folderRequired', '请选择存在的目录'));
     const identity = inferRootIdentity(resolved);
     this.upsertSeed({
       label: path.basename(resolved) || resolved,
@@ -97,7 +95,9 @@ export class RootsService {
   remove(id: string): SkillRoot[] {
     const row = this.database.sqlite.prepare('SELECT discovered, source_type FROM roots WHERE id = ?').get(id) as { discovered: number; source_type: string } | undefined;
     if (!row) return this.list();
-    if (row.discovered || row.source_type === 'trash') throw new Error('自动发现和回收站根目录不能移除');
+    if (row.discovered || row.source_type === 'trash') {
+      throw new Error(localizeMessage(this.translate, 'error.protectedRootRemove', '自动发现和回收站根目录不能移除'));
+    }
     this.database.sqlite.transaction(() => {
       this.database.sqlite.prepare('DELETE FROM skills WHERE root_id = ?').run(id);
       this.database.sqlite.prepare('DELETE FROM roots WHERE id = ?').run(id);
@@ -135,6 +135,7 @@ function mapRoot(row: Record<string, unknown>): SkillRoot {
   return {
     id: String(row.id),
     label: String(row.label),
+    labelCode: rootLabelCode(row),
     path: String(row.path),
     host: row.host as HostPlatform,
     scope: row.scope as SkillScope,
@@ -146,6 +147,24 @@ function mapRoot(row: Record<string, unknown>): SkillRoot {
     lastScannedAt: row.last_scanned_at ? String(row.last_scanned_at) : null,
     skillCount: Number(row.skill_count)
   };
+}
+
+function rootLabelCode(row: Record<string, unknown>): string | undefined {
+  if (!Boolean(row.discovered)) return undefined;
+  const host = row.host as HostPlatform;
+  const sourceType = row.source_type as SkillSourceType;
+  const normalizedPath = String(row.path).replace(/\\/g, '/').toLocaleLowerCase('en-US');
+  if (sourceType === 'trash') return 'trash';
+  if (host === 'codex' && sourceType === 'user') {
+    return normalizedPath.endsWith('/.agents/skills') ? 'codexShared' : 'codexUser';
+  }
+  if (host === 'claude' && sourceType === 'user') return 'claudeUser';
+  if (host === 'workbuddy' && sourceType === 'user') return 'workbuddyUser';
+  if (host === 'codex' && sourceType === 'cache') return 'codexPluginCache';
+  if (host === 'claude' && sourceType === 'cache') return 'claudePluginCache';
+  if (host === 'claude' && sourceType === 'marketplace') return 'claudeMarketplace';
+  if (host === 'workbuddy' && sourceType === 'plugin') return 'workbuddyPlugins';
+  return undefined;
 }
 
 export { mapRoot };

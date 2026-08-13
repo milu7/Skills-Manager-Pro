@@ -4,64 +4,66 @@ import wechatContact from '../assets/wechat-contact.png';
 import wechatOfficialAccount from '../assets/wechat-official-account.png';
 import wechatRewardCode from '../assets/wechat-reward-code.jpg';
 import { Modal } from './common';
+import { useTranslation } from 'react-i18next';
 
 export function AuthorModal({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
+  const { t } = useTranslation();
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="暴论哥3.0"
-      description="认识作者，也可以扫码添加微信、关注公众号或赞赏支持。"
+      title={t('app.authorName')}
+      description={t('workbench:author.description')}
       size="large"
       footer={(
         <>
-          <span className="footer-note">联系与赞赏图片均由作者提供，请使用微信扫码。</span>
-          <button className="button primary" type="button" onClick={() => onOpenChange(false)}>知道了</button>
+          <span className="footer-note">{t('workbench:author.footer')}</span>
+          <button className="button primary" type="button" onClick={() => onOpenChange(false)}>{t('workbench:author.done')}</button>
         </>
       )}
     >
       <div className="author-modal">
         <section className="author-intro">
           <div className="author-avatar">
-            <img src={authorAvatar} alt="暴论哥3.0头像" />
+            <img src={authorAvatar} alt={t('workbench:author.avatarAlt')} />
           </div>
           <div>
-            <span>作者</span>
-            <h3>暴论哥3.0</h3>
-            <p>你好，我是暴论哥3.0。这是我为本地 Skill 整理、检索和安全管理制作的工作台。更多更新与使用分享，可关注同名公众号。</p>
+            <span>{t('workbench:author.label')}</span>
+            <h3>{t('app.authorName')}</h3>
+            <p>{t('workbench:author.intro')}</p>
           </div>
         </section>
 
         <section className="author-section">
-          <header><h4>联系与关注</h4><p>使用微信扫码</p></header>
+          <header><h4>{t('workbench:author.contact')}</h4><p>{t('workbench:author.scanWechat')}</p></header>
           <div className="author-contact-grid">
             <CodeCard
               image={wechatContact}
-              imageAlt="添加作者微信二维码"
-              title="添加作者微信"
-              detail="扫码添加好友，交流使用问题与建议。"
+              imageAlt={t('workbench:author.wechatAlt')}
+              title={t('workbench:author.addWechat')}
+              detail={t('workbench:author.addWechatDetail')}
               mediaClassName="is-square"
             />
             <CodeCard
               image={wechatOfficialAccount}
-              imageAlt="暴论哥3.0公众号二维码"
-              title="关注公众号"
-              detail="微信扫码，或搜索“暴论哥3.0”。"
+              imageAlt={t('workbench:author.accountAlt')}
+              title={t('workbench:author.follow')}
+              detail={t('workbench:author.followDetail')}
               mediaClassName="is-wide"
             />
           </div>
         </section>
 
         <section className="author-section author-support">
-          <header><h4><HeartHandshake size={17} />支持创作</h4><p>一份心意，就是继续更新的动力</p></header>
+          <header><h4><HeartHandshake size={17} />{t('workbench:author.support')}</h4><p>{t('workbench:author.supportDetail')}</p></header>
           <article className="author-reward-card">
             <div className="author-reward-copy">
-              <span>微信赞赏</span>
-              <strong>觉得好用，可以请作者喝杯咖啡</strong>
-              <p>扫码后可自行填写赞赏金额。感谢你支持这款本地 Skill 管理工具继续完善。</p>
+              <span>{t('workbench:author.reward')}</span>
+              <strong>{t('workbench:author.coffee')}</strong>
+              <p>{t('workbench:author.rewardDetail')}</p>
             </div>
             <div className="author-code-media is-reward">
-              <img src={wechatRewardCode} alt="Harry的微信赞赏码" />
+              <img src={wechatRewardCode} alt={t('workbench:author.rewardAlt')} />
             </div>
           </article>
         </section>

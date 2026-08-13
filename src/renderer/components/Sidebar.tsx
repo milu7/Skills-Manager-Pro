@@ -1,23 +1,30 @@
-import { AlertCircle, ArchiveRestore, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Orbit, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertCircle, ArchiveRestore, Bot, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Orbit, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 import type { HostPlatform, SkillHealth } from '../../shared/types';
 import { useWorkbenchStore } from '../store';
 import { AuthorModal } from './AuthorModal';
+import { useTranslation } from 'react-i18next';
+import { translatedCategory, translatedHost } from '../i18n';
+import codexIcon from '../assets/platform-codex.svg';
+import claudeIcon from '../assets/platform-claude.svg';
+import workbuddyIcon from '../assets/platform-workbuddy.png';
 
-const hosts: Array<{ id: HostPlatform; label: string; mark: string }> = [
-  { id: 'codex', label: 'Codex', mark: 'CX' },
-  { id: 'claude', label: 'Claude', mark: 'CL' },
-  { id: 'workbuddy', label: 'WorkBuddy', mark: 'WB' },
-  { id: 'custom', label: '通用 / 自定义', mark: 'AG' }
+const hosts: Array<{ id: HostPlatform; icon?: string }> = [
+  { id: 'codex', icon: codexIcon },
+  { id: 'claude', icon: claudeIcon },
+  { id: 'workbuddy', icon: workbuddyIcon },
+  { id: 'custom' }
 ];
 
 export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
+  const { t } = useTranslation();
   const list = useWorkbenchStore((state) => state.list);
   const filters = useWorkbenchStore((state) => state.filters);
   const setFilters = useWorkbenchStore((state) => state.setFilters);
   const view = useWorkbenchStore((state) => state.view);
   const setView = useWorkbenchStore((state) => state.setView);
+  const setSettingsSection = useWorkbenchStore((state) => state.setSettingsSection);
   const stats = list?.stats;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasMoreBelow, setHasMoreBelow] = useState(false);
@@ -48,6 +55,7 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
     void setFilters(next, true);
   };
   const healthFilter = (health: SkillHealth) => showSkills({ health: [health], state: 'active' });
+  const openSettings = () => { setSettingsSection('general'); setView('settings'); };
   const allSkillsActive = view === 'skills'
     && filters.state === 'active'
     && !filters.hosts?.length
@@ -63,40 +71,40 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
         <div className="sidebar-scroll" ref={scrollRef}>
           <div className="sidebar-scroll-content">
             <section className="side-section">
-              <h2>资料库</h2>
-              <SideItem active={allSkillsActive} icon={<Boxes size={16} />} label="全部 Skills" count={stats?.total} onClick={() => showSkills({ state: 'active' })} />
-              <SideItem active={view === 'skills' && filters.writable === true} icon={<Wrench size={16} />} label="可编辑" count={stats?.writable} onClick={() => showSkills({ writable: true, state: 'active' })} />
-              <SideItem active={view === 'skills' && Boolean(filters.duplicateOnly)} icon={<Copy size={16} />} label="重复项" count={stats?.duplicates} onClick={() => showSkills({ duplicateOnly: true, state: 'active' })} />
-              <SideItem active={view === 'skills' && filters.health?.includes('error')} icon={<AlertCircle size={16} />} label="错误" count={stats?.errors} tone="red" onClick={() => healthFilter('error')} />
-              <SideItem active={view === 'skills' && filters.health?.includes('warning')} icon={<TriangleAlert size={16} />} label="需检查" count={stats?.warnings} tone="amber" onClick={() => healthFilter('warning')} />
+              <h2>{t('workbench:sidebar.library')}</h2>
+              <SideItem active={allSkillsActive} icon={<Boxes size={16} />} label={t('workbench:sidebar.all')} count={stats?.total} onClick={() => showSkills({ state: 'active' })} />
+              <SideItem active={view === 'skills' && filters.writable === true} icon={<Wrench size={16} />} label={t('workbench:sidebar.editable')} count={stats?.writable} onClick={() => showSkills({ writable: true, state: 'active' })} />
+              <SideItem active={view === 'skills' && Boolean(filters.duplicateOnly)} icon={<Copy size={16} />} label={t('workbench:sidebar.duplicates')} count={stats?.duplicates} onClick={() => showSkills({ duplicateOnly: true, state: 'active' })} />
+              <SideItem active={view === 'skills' && filters.health?.includes('error')} icon={<AlertCircle size={16} />} label={t('workbench:sidebar.errors')} count={stats?.errors} tone="red" onClick={() => healthFilter('error')} />
+              <SideItem active={view === 'skills' && filters.health?.includes('warning')} icon={<TriangleAlert size={16} />} label={t('workbench:sidebar.review')} count={stats?.warnings} tone="amber" onClick={() => healthFilter('warning')} />
               <SideItem
                 active={view === 'skills' && filters.state === 'disabled'}
                 icon={<CircleOff size={16} />}
-                label="已停用"
+                label={t('workbench:sidebar.disabled')}
                 count={stats?.disabled}
-                title="Claude / WorkBuddy 插件配置中 enabledPlugins 明确设为 false 的插件内 Skill"
+                title={t('workbench:sidebar.disabledHelp')}
                 onClick={() => showSkills({ state: 'disabled' })}
               />
-              <SideItem active={view === 'skills' && filters.state === 'trash'} icon={<ArchiveRestore size={16} />} label="回收站" count={stats?.trashed} onClick={() => showSkills({ state: 'trash' })} />
+              <SideItem active={view === 'skills' && filters.state === 'trash'} icon={<ArchiveRestore size={16} />} label={t('workbench:sidebar.trash')} count={stats?.trashed} onClick={() => showSkills({ state: 'trash' })} />
             </section>
 
             <section className="side-section">
-              <h2>平台</h2>
-              <p className="side-section-note">来源宿主，不是内容分类</p>
+              <h2>{t('workbench:sidebar.platforms')}</h2>
+              <p className="side-section-note">{t('workbench:sidebar.platformsHelp')}</p>
               {hosts.map((host) => (
-                <button key={host.id} type="button" title={host.id === 'custom' ? '用户添加且无法识别为 Codex、Claude 或 WorkBuddy 的扫描目录；无需导入 Skill' : `${host.label} 宿主中发现的 Skill`} className={clsx('side-host', filters.hosts?.includes(host.id) && view === 'skills' && 'is-active')} onClick={() => showSkills({ hosts: [host.id], state: 'active' })}>
-                  <span className={`host-mark host-${host.id}`}>{host.mark}</span><span>{host.label}</span><b>{stats?.byHost[host.id] ?? 0}</b>
+                <button key={host.id} type="button" title={host.id === 'custom' ? t('workbench:sidebar.customHelp') : t('workbench:sidebar.hostHelp', { host: translatedHost(t, host.id) })} className={clsx('side-host', filters.hosts?.includes(host.id) && view === 'skills' && 'is-active')} onClick={() => showSkills({ hosts: [host.id], state: 'active' })}>
+                  <span className={`host-mark host-${host.id}`} aria-hidden="true">{host.icon ? <img src={host.icon} alt="" /> : <Bot size={15} />}</span><span>{translatedHost(t, host.id)}</span><b>{stats?.byHost[host.id] ?? 0}</b>
                 </button>
               ))}
             </section>
 
             {stats && stats.categories.length > 0 && (
               <section className="side-section side-categories">
-                <h2>分类</h2>
-                <p className="side-section-note">仅用于工作台筛选</p>
+                <h2>{t('workbench:sidebar.categories')}</h2>
+                <p className="side-section-note">{t('workbench:sidebar.categoriesHelp')}</p>
                 {stats.categories.slice(0, 10).map((category) => (
                   <button key={category.name} type="button" className={clsx(filters.category === category.name && view === 'skills' && 'is-active')} onClick={() => showSkills({ category: category.name, state: 'active' })}>
-                    <span>{category.name}</span><b>{category.count}</b>
+                    <span>{translatedCategory(t, category.name)}</span><b>{category.count}</b>
                   </button>
                 ))}
               </section>
@@ -107,19 +115,19 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
           <button
             className="sidebar-more-hint"
             type="button"
-            aria-label="下方还有内容，继续查看"
+            aria-label={t('workbench:sidebar.moreAria')}
             onClick={() => scrollRef.current?.scrollBy({ top: Math.max(160, scrollRef.current.clientHeight * .55), behavior: 'smooth' })}
           >
-            <ChevronDown size={14} /><span>下方还有内容</span>
+            <ChevronDown size={14} /><span>{t('workbench:sidebar.more')}</span>
           </button>
         )}
       </div>
       <footer className="sidebar-footer">
-        <button type="button" onClick={() => setView('history')} className={view === 'history' ? 'is-active' : ''}><Clock3 size={16} /><span>操作历史</span></button>
-        <button type="button" onClick={() => setView('providers')} className={view === 'providers' ? 'is-active' : ''}><Sparkles size={16} /><span>AI 服务</span></button>
-        <button type="button" onClick={onManageRoots}><FolderCog size={16} /><span>扫描目录</span></button>
-        <button type="button" onClick={() => setAuthorOpen(true)}><Orbit size={16} /><span>暴论哥3.0</span></button>
-        <div className="privacy-note"><LockKeyhole size={13} /><span>本地索引 · 密钥由系统保护</span></div>
+        <button type="button" onClick={() => setView('history')} className={view === 'history' ? 'is-active' : ''}><Clock3 size={16} /><span>{t('workbench:sidebar.history')}</span></button>
+        <button type="button" onClick={openSettings} className={view === 'settings' ? 'is-active' : ''}><Sparkles size={16} /><span>{t('workbench:sidebar.settings')}</span></button>
+        <button type="button" onClick={onManageRoots}><FolderCog size={16} /><span>{t('workbench:sidebar.roots')}</span></button>
+        <button type="button" onClick={() => setAuthorOpen(true)}><Orbit size={16} /><span>{t('app.authorName')}</span></button>
+        <div className="privacy-note"><LockKeyhole size={13} /><span>{t('workbench:sidebar.privacy')}</span></div>
       </footer>
       <AuthorModal open={authorOpen} onOpenChange={setAuthorOpen} />
     </aside>

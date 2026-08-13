@@ -1,4 +1,4 @@
-# Skill 管理工作台
+# Skills Manager Pro
 
 Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude、WorkBuddy 与项目目录中的 Skill。Skill 文件仍保留在原位置；数据库只保存索引、分类、标签、历史快照和 AI 分析结果。
 
@@ -8,7 +8,7 @@ Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude�
 
 <p align="center">
   <a href="docs/images/software-preview/overview.png">
-    <img src="docs/images/software-preview/overview.png" alt="Skill 管理工作台统一索引与详情概览" width="100%">
+    <img src="docs/images/software-preview/overview.png" alt="Skills Manager Pro 统一索引与详情概览" width="100%">
   </a>
   <br>
   <sub>统一索引、来源识别、状态筛选与 Skill 详情概览</sub>
@@ -61,6 +61,7 @@ Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude�
 - 安全 Markdown 预览、结构化元数据与正文编辑、文本资源高级编辑、并发冲突拦截和修改前差异确认。
 - 显示名与内部名称分开修改；内部改名预检目录、宿主元数据和自引用。
 - 工作台回收站、恢复、操作历史和文本快照；没有永久删除入口。
+- 支持跟随系统、简体中文和英文界面；语言可在“软件设置 → 常规”即时切换并在重启后保持。
 - Chat Completions 与 Responses 两种 AI 协议、发送内容预览、附件上限、结构化校验、结果缓存、任务取消，以及最多 20 个当前筛选结果的再次确认式批量分析。
 - Electron 安全隔离、Zod IPC 参数校验、`safeStorage` 密钥加密和 Windows x64 打包。
 
@@ -88,14 +89,15 @@ npm.cmd run smoke:packaged
 
 ## 数据与安全边界
 
-- 打包版默认数据目录为 Electron 的 `userData` 目录，Windows 通常位于 `%APPDATA%\Skill 管理工作台`。
+- 为保证升级后继续读取原有索引，打包版沿用历史数据目录 `%APPDATA%\Skill 管理工作台`；对外软件名称为 `Skills Manager Pro`。
 - 索引数据库为 `skill-workbench.sqlite3`，工作台回收站为同目录下的 `trash`。
 - API Key 与自定义敏感请求头经 Electron `safeStorage` 加密后才写入数据库；界面和 IPC 不回传明文密钥。
 - 用户和项目来源默认可写；插件、内置、市场、缓存和备份默认只读。
 - 编辑保存使用同目录临时文件与原子替换；磁盘哈希与加载时不一致时会阻止覆盖。
 - AI 分析必须手动触发，默认只发送 `SKILL.md`；脚本和二进制不会发送，也不会自动执行或改写 Skill。
+- 界面语言不会翻译或改写 Skill 内容、路径、备注和自定义标签；AI 新分析结果会按当前界面语言生成，并与其他语言的缓存隔离。
 
-完整设计见 [架构与安全边界](docs/架构与安全边界.md)，备份步骤见 [数据备份与恢复](docs/数据备份与恢复.md)，本次证据与产物哈希见 [v0.1.0 验收记录](docs/v0.1.0-验收记录.md)。
+完整设计见 [架构与安全边界](docs/架构与安全边界.md)，备份步骤见 [数据备份与恢复](docs/数据备份与恢复.md)，多语言测试分支证据与产物哈希见 [v0.2.0 多语言验收记录](docs/v0.2.0-i18n-验收记录.md)。
 
 ## v1 边界
 

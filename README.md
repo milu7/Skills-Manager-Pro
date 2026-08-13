@@ -2,6 +2,57 @@
 
 Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude、WorkBuddy 与项目目录中的 Skill。Skill 文件仍保留在原位置；数据库只保存索引、分类、标签、历史快照和 AI 分析结果。
 
+## 软件预览
+
+点击图片可查看完整尺寸。
+
+<p align="center">
+  <a href="docs/images/software-preview/overview.png">
+    <img src="docs/images/software-preview/overview.png" alt="Skill 管理工作台统一索引与详情概览" width="100%">
+  </a>
+  <br>
+  <sub>统一索引、来源识别、状态筛选与 Skill 详情概览</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>可编辑 Skill 与内容预览</strong><br>
+      <a href="docs/images/software-preview/editable-skill.png">
+        <img src="docs/images/software-preview/editable-skill.png" alt="可编辑 Skill 与内容预览">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>本地安全诊断</strong><br>
+      <a href="docs/images/software-preview/diagnostics.png">
+        <img src="docs/images/software-preview/diagnostics.png" alt="Skill 本地安全诊断与错误提示">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>重复项识别</strong><br>
+      <a href="docs/images/software-preview/duplicates.png">
+        <img src="docs/images/software-preview/duplicates.png" alt="Skill 精确重复项识别">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>结构化元数据编辑</strong><br>
+      <a href="docs/images/software-preview/structured-editor.png">
+        <img src="docs/images/software-preview/structured-editor.png" alt="Skill 结构化元数据编辑器">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <strong>图片备注与实时预览</strong><br>
+      <a href="docs/images/software-preview/image-notes.png">
+        <img src="docs/images/software-preview/image-notes.png" alt="Skill 图片备注与 Markdown 实时预览">
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## 已实现能力
 
 - 自动发现用户级目录，并可添加项目根目录；区分用户、项目、插件、内置、市场、缓存、备份和回收站来源。

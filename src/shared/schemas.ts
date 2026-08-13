@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 const skillId = z.string().uuid();
 const expectedHash = z.string().regex(/^[a-f0-9]{64}$/i);
-const relativePath = z.string().min(1).max(500).refine((value) => !value.includes('\0'), '路径包含非法字符');
+const relativePath = z.string().min(1).max(500).refine((value) => !value.includes('\0'), 'i18n:pathInvalidCharacters');
+
+export const localePreferenceSchema = z.enum(['system', 'zh-CN', 'en-US']);
 
 export const skillListFiltersSchema = z
   .object({
@@ -54,7 +56,7 @@ export const saveSkillNoteSchema = z.object({
 
 export const renameSchema = z.object({
   skillId,
-  newName: z.string().trim().min(1).max(128).refine((value) => !/[\\/:*?"<>|]/.test(value), '名称包含 Windows 禁止字符'),
+  newName: z.string().trim().min(1).max(128).refine((value) => !/[\\/:*?"<>|]/.test(value), 'i18n:nameForbiddenCharacters'),
   expectedHash
 });
 
@@ -62,7 +64,7 @@ export const saveProviderSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(80),
   protocol: z.enum(['chat_completions', 'responses']),
-  baseUrl: z.string().url().max(500).refine((value) => /^https?:\/\//i.test(value), '仅支持 HTTP 或 HTTPS'),
+  baseUrl: z.string().url().max(500).refine((value) => /^https?:\/\//i.test(value), 'i18n:httpOnly'),
   model: z.string().trim().min(1).max(120),
   timeoutMs: z.number().int().min(5_000).max(300_000),
   headers: z.record(z.string(), z.string().max(2_000)),
@@ -74,7 +76,8 @@ export const runAiSchema = z.object({
   skillId,
   providerId: z.string().uuid(),
   attachments: z.array(relativePath).max(100),
-  expectedHash
+  expectedHash,
+  outputLocale: z.enum(['zh-CN', 'en-US']).optional()
 });
 
 export const aiAnalysisPayloadSchema = z.object({

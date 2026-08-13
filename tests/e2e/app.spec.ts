@@ -1,7 +1,10 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
+import BetterSqlite3 from 'better-sqlite3/win32-x64';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { LocalePreference } from '../../src/shared/types';
+import { migrations } from '../../src/main/db/migrations';
 
 test('built Electron app starts with sandboxed renderer and indexes three host formats', async () => {
   const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-e2e-'));
@@ -16,6 +19,7 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
   const protectedSkill = path.join(projectRoot, '.agents', 'skills', 'builtin', 'system-guard');
   await fs.mkdir(protectedSkill, { recursive: true });
   await fs.writeFile(path.join(protectedSkill, 'SKILL.md'), '---\nname: system-guard\ndescription: 只读来源显示测试。\n---\n\n# 系统保护技能\n');
+  await seedLocalePreference(userData, 'zh-CN');
   const application = await electron.launch({
     args: [path.resolve('.webpack', 'x64', 'main')],
     env: {
@@ -42,11 +46,11 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await page.getByRole('button', { name: '开始浏览' }).click();
     await expect(page.getByText('Skill 管理工作台', { exact: true })).toBeVisible();
     await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toBeVisible();
-    await expect(page.locator('.brand-version')).toHaveText('v0.1.8');
+    await expect(page.locator('.brand-version')).toHaveText('v0.2.0');
     await expect(page.locator('.brand-version i')).toHaveCSS('background-color', 'rgb(32, 164, 122)');
     await expect(page.getByText('来源宿主，不是内容分类', { exact: true })).toBeVisible();
-    await expect(page.getByText('仅用于工作台筛选', { exact: true })).toBeVisible();
     await expect.poll(async () => page.locator('.skill-row').count(), { timeout: 15_000 }).toBe(5);
+    await expect(page.getByText('仅用于工作台筛选', { exact: true })).toBeVisible();
     const librarySection = page.locator('.side-section').first();
     const allSkillsFilter = page.getByRole('button', { name: /全部 Skills/ });
     const writableFilter = page.getByRole('button', { name: /可编辑/ });
@@ -80,7 +84,7 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     }));
     expect(rendererCapabilities).toEqual({ processType: 'undefined', requireType: 'undefined', hasWorkbenchApi: true });
 
-    await page.getByRole('button', { name: 'AI 服务', exact: true }).click();
+    await page.locator('.topbar-status').getByRole('button', { name: '软件设置', exact: true }).click();
     await page.keyboard.press('Control+K');
     const globalSearch = page.getByRole('textbox', { name: '搜索 Skills' });
     await expect(globalSearch).toBeEnabled();
@@ -97,7 +101,7 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await expect(authorDialog.getByRole('img', { name: '暴论哥3.0头像' })).toBeVisible();
     await expect(authorDialog.getByRole('img', { name: '添加作者微信二维码' })).toBeVisible();
     await expect(authorDialog.getByRole('img', { name: '暴论哥3.0公众号二维码' })).toBeVisible();
-    await expect(authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' })).toBeVisible();
+    await expect(authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' })).toBeVisible();
     await expect(authorDialog.getByText('二维码待补充')).toHaveCount(0);
     await expect(authorDialog.locator('.author-reward-card')).toHaveCount(1);
     const authorImageSizes = await authorDialog.locator('img').evaluateAll((images) => images.map((image) => {
@@ -145,8 +149,8 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     expect(compactAuthorBox!.y).toBeGreaterThanOrEqual(0);
     expect(compactAuthorBox!.x + compactAuthorBox!.width).toBeLessThanOrEqual(1120);
     expect(compactAuthorBox!.y + compactAuthorBox!.height).toBeLessThanOrEqual(720);
-    await authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' }).scrollIntoViewIfNeeded();
-    await expect(authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' })).toBeVisible();
+    await authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' }).scrollIntoViewIfNeeded();
+    await expect(authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' })).toBeVisible();
     await page.screenshot({ path: 'test-results/skill-workbench-author-compact.png', fullPage: true });
     await page.setViewportSize({ width: 1500, height: 940 });
     await authorDialog.getByRole('button', { name: '知道了' }).click();
@@ -213,14 +217,15 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await page.setViewportSize({ width: 1500, height: 940 });
     await page.screenshot({ path: 'test-results/skill-workbench-note.png', fullPage: true });
 
-    await page.getByRole('button', { name: 'AI 服务设置' }).click();
+    await page.locator('.topbar-status').getByRole('button', { name: '软件设置', exact: true }).click();
+    await page.getByTestId('settings-ai-tab').click();
     await page.getByLabel('配置名称').fill('E2E Mock');
     await page.getByLabel('Base URL').fill('http://127.0.0.1:65534');
     await page.getByLabel('模型').fill('mock-model');
     await page.getByLabel('API Key').fill('temporary-test-key');
     await page.getByRole('button', { name: '加密保存' }).click();
     await expect(page.getByRole('status')).toContainText('加密保存');
-    await expect(page.getByRole('heading', { name: 'AI 服务设置' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'AI 服务', exact: true })).toBeVisible();
     const toggleSize = await page.getByRole('checkbox', { name: '启用此服务' }).evaluate((element) => {
       const box = element.getBoundingClientRect();
       return { width: box.width, height: box.height };
@@ -247,7 +252,7 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await expect(page.getByRole('status')).toContainText('修改已保存');
 
     await page.getByRole('button', { name: '操作历史' }).click();
-    await expect(page.locator('.history-list')).toContainText('修改结构化元数据');
+    await expect(page.locator('.history-list')).toContainText('编辑结构化元数据');
     await page.getByRole('button', { name: '恢复此前快照' }).click();
     await expect(page.getByRole('status')).toContainText('保存成功');
 
@@ -257,3 +262,139 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await fs.rm(testRoot, { recursive: true, force: true });
   }
 });
+
+test('switches to English immediately, preserves user content, and restores the preference after restart', async () => {
+  const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-i18n-e2e-'));
+  const projectRoot = path.join(testRoot, 'project');
+  const userData = path.join(testRoot, 'user-data');
+  await fs.cp(path.resolve('tests/e2e-project'), projectRoot, { recursive: true });
+  const fixturePath = path.join(projectRoot, '.agents', 'skills', 'design-helper', 'SKILL.md');
+  const fixtureBefore = await fs.readFile(fixturePath, 'utf8');
+  await seedLocalePreference(userData, 'zh-CN');
+  let application: ElectronApplication | null = null;
+
+  try {
+    application = await launchWorkbench(userData, projectRoot);
+    let page = await application.firstWindow();
+    await setWindowSize(application, 1120, 720);
+    const guide = page.getByRole('dialog', { name: '欢迎来到 Skill 管理工作台' });
+    await expect(guide).toBeVisible();
+    await guide.getByRole('button', { name: '开始浏览' }).click();
+    await expect.poll(async () => page.locator('.skill-row').count(), { timeout: 15_000 }).toBeGreaterThan(0);
+
+    await page.locator('.topbar-status').getByRole('button', { name: '软件设置', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '软件设置', exact: true })).toBeVisible();
+    await page.getByTestId('locale-select').selectOption('en-US');
+
+    await expect(page.getByRole('heading', { name: 'Software settings', exact: true })).toBeVisible();
+    await expect(page.getByTestId('locale-select')).toHaveValue('en-US');
+    await expect(page.getByRole('status')).toContainText('Language preference saved');
+    await expect.poll(async () => page.evaluate(() => ({
+      lang: document.documentElement.lang,
+      dir: document.documentElement.dir,
+      title: document.title
+    }))).toEqual({ lang: 'en-US', dir: 'ltr', title: 'Skill Workbench' });
+    await expect.poll(async () => application!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle()))
+      .toBe('Skill Workbench');
+
+    await page.getByTestId('settings-ai-tab').click();
+    await expect(page.getByRole('heading', { name: 'AI services', exact: true })).toBeVisible();
+    const compactLayout = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      bodyWidth: document.body.scrollWidth,
+      panelWidth: document.querySelector<HTMLElement>('.wide-panel')?.scrollWidth ?? 0,
+      panelClientWidth: document.querySelector<HTMLElement>('.wide-panel')?.clientWidth ?? 0
+    }));
+    expect(compactLayout.bodyWidth).toBeLessThanOrEqual(compactLayout.viewportWidth);
+    expect(compactLayout.panelWidth).toBeLessThanOrEqual(compactLayout.panelClientWidth);
+    await page.screenshot({ path: 'test-results/skill-workbench-settings-en.png', fullPage: true });
+    await page.getByLabel('Configuration name').fill('Invalid endpoint');
+    await page.getByLabel('Base URL').fill('ftp://example.com');
+    await page.getByLabel('Model').fill('test-model');
+    await page.getByRole('button', { name: 'Save securely' }).click();
+    await expect(page.getByRole('status')).toContainText('Only HTTP or HTTPS addresses are supported');
+    await page.getByRole('button', { name: 'Close notification' }).click();
+
+    await page.getByRole('button', { name: 'Skill Workbench home' }).click();
+    await expect(page.getByRole('button', { name: 'Baolunge 3.0', exact: true })).toBeVisible();
+    await expect(page.locator('.skill-row').filter({ hasText: '视觉审计助手' })).toBeVisible();
+    await expect(page.locator('.skill-row').filter({ hasText: '为本地产品界面提供视觉审计、排版和色彩建议。' })).toBeVisible();
+    const sidebarLayout = await page.locator('.sidebar').evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      bottom: element.getBoundingClientRect().bottom,
+      viewportHeight: window.innerHeight
+    }));
+    expect(sidebarLayout.scrollWidth).toBeLessThanOrEqual(sidebarLayout.clientWidth);
+    expect(sidebarLayout.bottom).toBeLessThanOrEqual(sidebarLayout.viewportHeight + 0.5);
+
+    await page.locator('.topbar-status').getByRole('button', { name: 'Manage scan roots' }).click();
+    const rootsDialog = page.getByRole('dialog', { name: 'Scan folders' });
+    await expect(rootsDialog).toBeVisible();
+    await expect.poll(async () => rootsDialog.evaluate((element) => getComputedStyle(element).opacity)).toBe('1');
+    const dialogLayout = await rootsDialog.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left, top: box.top, right: box.right, bottom: box.bottom,
+        scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
+        viewportWidth: window.innerWidth, viewportHeight: window.innerHeight
+      };
+    });
+    expect(dialogLayout.left).toBeGreaterThanOrEqual(0);
+    expect(dialogLayout.top).toBeGreaterThanOrEqual(0);
+    expect(dialogLayout.right).toBeLessThanOrEqual(dialogLayout.viewportWidth + 0.5);
+    expect(dialogLayout.bottom).toBeLessThanOrEqual(dialogLayout.viewportHeight + 0.5);
+    expect(dialogLayout.scrollWidth).toBeLessThanOrEqual(dialogLayout.clientWidth);
+    await page.screenshot({ path: 'test-results/skill-workbench-roots-en.png', fullPage: true });
+    await rootsDialog.getByRole('button', { name: 'Close' }).click();
+    expect(await fs.readFile(fixturePath, 'utf8')).toBe(fixtureBefore);
+
+    await application.close();
+    application = await launchWorkbench(userData, projectRoot);
+    page = await application.firstWindow();
+    await setWindowSize(application, 1120, 720);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
+    await expect(page.getByText('Skill Workbench', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /All Skills/ })).toBeVisible();
+    await expect.poll(async () => application!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle()))
+      .toBe('Skill Workbench');
+  } finally {
+    await application?.close();
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
+
+async function launchWorkbench(userData: string, projectRoot: string): Promise<ElectronApplication> {
+  return electron.launch({
+    args: [path.resolve('.webpack', 'x64', 'main')],
+    env: {
+      ...process.env,
+      SKILL_WORKBENCH_USER_DATA: userData,
+      SKILL_WORKBENCH_DISABLE_DEFAULT_ROOTS: '1',
+      SKILL_WORKBENCH_TEST_ROOT: projectRoot
+    }
+  });
+}
+
+async function setWindowSize(application: ElectronApplication, width: number, height: number): Promise<void> {
+  await application.evaluate(({ BrowserWindow }, size) => {
+    BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+  }, { width, height });
+}
+
+async function seedLocalePreference(userData: string, preference: LocalePreference): Promise<void> {
+  await fs.mkdir(userData, { recursive: true });
+  const sqlite = new BetterSqlite3(path.join(userData, 'skill-workbench.sqlite3'));
+  try {
+    for (const migration of migrations) {
+      sqlite.exec(migration.sql);
+      sqlite.pragma(`user_version = ${migration.version}`);
+    }
+    sqlite.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('locale.preference', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(preference, new Date().toISOString());
+  } finally {
+    sqlite.close();
+  }
+}

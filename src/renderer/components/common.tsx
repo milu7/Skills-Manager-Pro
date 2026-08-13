@@ -3,6 +3,8 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { Check, X } from 'lucide-react';
 import type { PropsWithChildren, ReactNode } from 'react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
+import { activeLocale, i18n } from '../i18n';
 
 export function IconButton({
   label,
@@ -39,6 +41,7 @@ export function Modal({
   footer?: ReactNode;
   size?: 'small' | 'medium' | 'large' | 'wide';
 }>) {
+  const { t } = useTranslation();
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -49,7 +52,7 @@ export function Modal({
               <Dialog.Title>{title}</Dialog.Title>
               {description && <Dialog.Description>{description}</Dialog.Description>}
             </div>
-            <Dialog.Close asChild><button className="icon-button" aria-label="关闭"><X size={18} /></button></Dialog.Close>
+            <Dialog.Close asChild><button className="icon-button" aria-label={t('action.close')}><X size={18} /></button></Dialog.Close>
           </header>
           <div className="dialog-body">{children}</div>
           {footer && <footer className="dialog-footer">{footer}</footer>}
@@ -72,12 +75,12 @@ export function Field({ label, hint, children }: PropsWithChildren<{ label: stri
 }
 
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return `${new Intl.NumberFormat(activeLocale()).format(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: bytes < 10 * 1024 ? 1 : 0 }).format(bytes / 1024)} KB`;
+  return `${new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
 }
 
 export function formatDate(value: string | null): string {
-  if (!value) return '从未';
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  if (!value) return i18n.t('common:status.never');
+  return new Intl.DateTimeFormat(activeLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }

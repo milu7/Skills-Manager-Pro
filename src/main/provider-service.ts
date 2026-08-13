@@ -1,7 +1,7 @@
 import { safeStorage } from 'electron';
 import type { AiProtocol, AiProvider, SaveAiProviderInput } from '../shared/types';
 import type { DatabaseContext } from './db/database';
-import { createId, errorMessage, nowIso, safeJsonParse } from './utils';
+import { createId, errorMessage, localizeMessage, nowIso, safeJsonParse, type MessageTranslator } from './utils';
 
 const MASKED_VALUE = '';
 
@@ -11,7 +11,10 @@ export interface RuntimeProvider extends AiProvider {
 }
 
 export class ProviderService {
-  constructor(private readonly database: DatabaseContext) {}
+  constructor(
+    private readonly database: DatabaseContext,
+    private readonly translate?: MessageTranslator
+  ) {}
 
   list(): AiProvider[] {
     const rows = this.database.sqlite.prepare('SELECT * FROM providers ORDER BY enabled DESC, name COLLATE NOCASE').all() as Array<Record<string, unknown>>;
@@ -27,8 +30,10 @@ export class ProviderService {
     const previousHeaders = existing ? this.decryptJsonHeaders(String(existing.headers_json)) : {};
     const mergedHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(input.headers)) {
-      assertHeaderName(key);
-      if (value.includes('\r') || value.includes('\n')) throw new Error(`请求头 ${key} 包含非法换行`);
+      assertHeaderName(key, this.translate);
+      if (value.includes('\r') || value.includes('\n')) {
+        throw new Error(localizeMessage(this.translate, 'error.providerHeaderNewline', `请求头 ${key} 包含非法换行`, { name: key }));
+      }
       mergedHeaders[key] = value || previousHeaders[key] || '';
     }
     const encryptedHeaders = this.encrypt(JSON.stringify(mergedHeaders));
@@ -47,7 +52,9 @@ export class ProviderService {
       id, input.name, input.protocol, input.baseUrl.replace(/\/+$/, ''), input.model,
       input.timeoutMs, encryptedHeaders, encryptedApiKey, Number(input.enabled), existing?.created_at ?? now, now
     );
-    return this.list().find((provider) => provider.id === id) ?? (() => { throw new Error('AI 服务保存失败'); })();
+    return this.list().find((provider) => provider.id === id) ?? (() => {
+      throw new Error(localizeMessage(this.translate, 'error.providerSaveFailed', 'AI 服务保存失败'));
+    })();
   }
 
   remove(id: string): void {
@@ -61,7 +68,7 @@ export class ProviderService {
 
   getRuntime(id: string): RuntimeProvider {
     const row = this.database.sqlite.prepare('SELECT * FROM providers WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-    if (!row) throw new Error('AI 服务配置不存在');
+    if (!row) throw new Error(localizeMessage(this.translate, 'error.providerMissing', 'AI 服务配置不存在'));
     const provider = mapProvider(row);
     return {
       ...provider,
@@ -79,12 +86,15 @@ export class ProviderService {
     try {
       const response = await fetchWithTimeout(endpoint, {
         method: 'POST', headers: providerHeaders(provider), body: JSON.stringify(body)
-      }, provider.timeoutMs);
+      }, provider.timeoutMs, this.translate);
       if (!response.ok) throw new Error(await safeHttpError(response));
       this.database.sqlite.prepare(`
         UPDATE providers SET last_tested_at = ?, last_test_status = 'success', updated_at = ? WHERE id = ?
       `).run(nowIso(), nowIso(), id);
-      return { ok: true, message: `连接成功 · HTTP ${response.status}` };
+      return {
+        ok: true,
+        message: localizeMessage(this.translate, 'success.providerConnected', `连接成功 · HTTP ${response.status}`, { status: response.status })
+      };
     } catch (error) {
       this.database.sqlite.prepare(`
         UPDATE providers SET last_tested_at = ?, last_test_status = 'failure', updated_at = ? WHERE id = ?
@@ -94,12 +104,12 @@ export class ProviderService {
   }
 
   private encrypt(value: string): string {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用，已拒绝保存明文密钥');
+    if (!safeStorage.isEncryptionAvailable()) throw new Error(localizeMessage(this.translate, 'error.secureStorageSaveUnavailable', '系统安全存储当前不可用，已拒绝保存明文密钥'));
     return safeStorage.encryptString(value).toString('base64');
   }
 
   private decrypt(value: string): string {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用，无法读取密钥');
+    if (!safeStorage.isEncryptionAvailable()) throw new Error(localizeMessage(this.translate, 'error.secureStorageReadUnavailable', '系统安全存储当前不可用，无法读取密钥'));
     return safeStorage.decryptString(Buffer.from(value, 'base64'));
   }
 
@@ -145,7 +155,12 @@ export function providerHeaders(provider: RuntimeProvider): Record<string, strin
   return headers;
 }
 
-export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  translate?: MessageTranslator
+): Promise<Response> {
   const controller = new AbortController();
   const externalSignal = init.signal;
   const abortFromExternal = () => controller.abort(externalSignal?.reason);
@@ -155,7 +170,10 @@ export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
-    if ((error as Error).name === 'AbortError') throw new Error(`请求超过 ${Math.round(timeoutMs / 1000)} 秒，已取消`);
+    if ((error as Error).name === 'AbortError') {
+      const seconds = Math.round(timeoutMs / 1000);
+      throw new Error(localizeMessage(translate, 'error.requestTimeout', `请求超过 ${seconds} 秒，已取消`, { seconds }));
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -172,15 +190,19 @@ export async function safeHttpError(response: Response): Promise<string> {
   } catch {
     details = '';
   }
-  return `HTTP ${response.status}${details ? `：${details}` : ''}`;
+  return `HTTP ${response.status}${details ? `: ${details}` : ''}`;
 }
 
-function assertHeaderName(name: string): void {
+function assertHeaderName(name: string, translate?: MessageTranslator): void {
   const normalized = name.trim().toLocaleLowerCase('en-US');
-  if (!normalized || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(normalized)) throw new Error(`请求头名称无效：${name}`);
-  if (['host', 'content-length', 'connection', 'transfer-encoding'].includes(normalized)) throw new Error(`不允许设置请求头：${name}`);
+  if (!normalized || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(normalized)) {
+    throw new Error(localizeMessage(translate, 'error.headerInvalid', `请求头名称无效：${name}`, { name }));
+  }
+  if (['host', 'content-length', 'connection', 'transfer-encoding'].includes(normalized)) {
+    throw new Error(localizeMessage(translate, 'error.headerForbidden', `不允许设置请求头：${name}`, { name }));
+  }
 }
 
 function redact(message: string, secret: string): string {
-  return secret ? message.split(secret).join('[已脱敏]') : message;
+  return secret ? message.split(secret).join('[REDACTED]') : message;
 }

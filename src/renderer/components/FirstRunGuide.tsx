@@ -27,7 +27,7 @@ export function FirstRunGuide({
       onOpenChange={(next) => {
         if (!next) close();
       }}
-      title="欢迎来到 Skill 管理工作台"
+      title="欢迎来到 Skills Manager Pro"
       description="先索引，再判断，最后由你确认每一次文件修改。"
       size="large"
       footer={(

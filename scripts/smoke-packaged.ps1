@@ -2,12 +2,12 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $packagedDirectory = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'out') -Directory | Where-Object {
-  Test-Path -LiteralPath (Join-Path $_.FullName 'SkillWorkbench.exe')
+  Test-Path -LiteralPath (Join-Path $_.FullName 'SkillsManagerPro.exe')
 } | Select-Object -First 1
 if (-not $packagedDirectory) {
-  throw 'Packaged SkillWorkbench.exe was not found. Run npm.cmd run build first.'
+  throw 'Packaged SkillsManagerPro.exe was not found. Run npm.cmd run build first.'
 }
-$executablePath = Join-Path $packagedDirectory.FullName 'SkillWorkbench.exe'
+$executablePath = Join-Path $packagedDirectory.FullName 'SkillsManagerPro.exe'
 $nativeModulePath = Join-Path $packagedDirectory.FullName 'resources\app.asar.unpacked\.webpack\main\native_modules\prebuilds\win32-x64.node'
 $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $userDataPath = Join-Path $tempBase ("skill-workbench-packaged-smoke-" + [Guid]::NewGuid().ToString('N'))

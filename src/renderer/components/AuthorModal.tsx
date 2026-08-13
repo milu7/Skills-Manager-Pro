@@ -1,4 +1,8 @@
-import { HeartHandshake, MessageCircle, QrCode, Radio } from 'lucide-react';
+import { HeartHandshake } from 'lucide-react';
+import authorAvatar from '../assets/author-avatar.png';
+import wechatContact from '../assets/wechat-contact.png';
+import wechatOfficialAccount from '../assets/wechat-official-account.png';
+import wechatRewardCode from '../assets/wechat-reward-code.jpg';
 import { Modal } from './common';
 
 export function AuthorModal({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
@@ -6,19 +10,21 @@ export function AuthorModal({ open, onOpenChange }: { open: boolean; onOpenChang
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="戳戳作者👽"
-      description="认识作者、找到同名公众号，二维码素材准备好后会补充到这里。"
+      title="暴论哥3.0"
+      description="认识作者，也可以扫码添加微信、关注公众号或赞赏支持。"
       size="large"
       footer={(
         <>
-          <span className="footer-note">当前所有二维码区域均为设计占位，不包含可扫描内容。</span>
+          <span className="footer-note">联系与赞赏图片均由作者提供，请使用微信扫码。</span>
           <button className="button primary" type="button" onClick={() => onOpenChange(false)}>知道了</button>
         </>
       )}
     >
       <div className="author-modal">
         <section className="author-intro">
-          <div className="author-avatar" aria-hidden="true">暴</div>
+          <div className="author-avatar">
+            <img src={authorAvatar} alt="暴论哥3.0头像" />
+          </div>
           <div>
             <span>作者</span>
             <h3>暴论哥3.0</h3>
@@ -27,33 +33,62 @@ export function AuthorModal({ open, onOpenChange }: { open: boolean; onOpenChang
         </section>
 
         <section className="author-section">
-          <header><h4>联系与关注</h4><p>二维码图片待补充，名称和位置已经预留。</p></header>
+          <header><h4>联系与关注</h4><p>使用微信扫码</p></header>
           <div className="author-contact-grid">
-            <QrPlaceholder icon={<MessageCircle size={22} />} title="作者微信" detail="微信号与二维码待补充" />
-            <QrPlaceholder icon={<Radio size={22} />} title="公众号" detail="暴论哥3.0（公众号同名）" />
+            <CodeCard
+              image={wechatContact}
+              imageAlt="添加作者微信二维码"
+              title="添加作者微信"
+              detail="扫码添加好友，交流使用问题与建议。"
+              mediaClassName="is-square"
+            />
+            <CodeCard
+              image={wechatOfficialAccount}
+              imageAlt="暴论哥3.0公众号二维码"
+              title="关注公众号"
+              detail="微信扫码，或搜索“暴论哥3.0”。"
+              mediaClassName="is-wide"
+            />
           </div>
         </section>
 
         <section className="author-section author-support">
-          <header><h4><HeartHandshake size={17} />支持创作</h4><p>三个打赏档位先保留版位，金额与二维码以后补充。</p></header>
-          <div className="author-reward-grid">
-            <QrPlaceholder compact icon={<QrCode size={20} />} title="打赏档位 1" detail="金额待设置" />
-            <QrPlaceholder compact icon={<QrCode size={20} />} title="打赏档位 2" detail="金额待设置" />
-            <QrPlaceholder compact icon={<QrCode size={20} />} title="打赏档位 3" detail="金额待设置" />
-          </div>
+          <header><h4><HeartHandshake size={17} />支持创作</h4><p>一份心意，就是继续更新的动力</p></header>
+          <article className="author-reward-card">
+            <div className="author-reward-copy">
+              <span>微信赞赏</span>
+              <strong>觉得好用，可以请作者喝杯咖啡</strong>
+              <p>扫码后可自行填写赞赏金额。感谢你支持这款本地 Skill 管理工具继续完善。</p>
+            </div>
+            <div className="author-code-media is-reward">
+              <img src={wechatRewardCode} alt="Harry的微信赞赏码" />
+            </div>
+          </article>
         </section>
       </div>
     </Modal>
   );
 }
 
-function QrPlaceholder({ icon, title, detail, compact = false }: { icon: React.ReactNode; title: string; detail: string; compact?: boolean }) {
+function CodeCard({
+  image,
+  imageAlt,
+  title,
+  detail,
+  mediaClassName
+}: {
+  image: string;
+  imageAlt: string;
+  title: string;
+  detail: string;
+  mediaClassName: 'is-square' | 'is-wide';
+}) {
   return (
-    <article className={compact ? 'qr-placeholder-card is-compact' : 'qr-placeholder-card'}>
-      <div className="qr-placeholder" role="img" aria-label={`${title}二维码待补充`}>
-        {icon}<span>二维码待补充</span>
+    <article className={`author-code-card ${mediaClassName === 'is-square' ? 'is-contact-card' : 'is-account-card'}`}>
+      <div className={`author-code-media ${mediaClassName}`}>
+        <img src={image} alt={imageAlt} />
       </div>
-      <div className="qr-placeholder-copy"><strong>{title}</strong><span>{detail}</span></div>
+      <div className="author-code-copy"><strong>{title}</strong><span>{detail}</span></div>
     </article>
   );
 }

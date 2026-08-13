@@ -48,6 +48,14 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
     void setFilters(next, true);
   };
   const healthFilter = (health: SkillHealth) => showSkills({ health: [health], state: 'active' });
+  const allSkillsActive = view === 'skills'
+    && filters.state === 'active'
+    && !filters.hosts?.length
+    && !filters.sourceTypes?.length
+    && !filters.health?.length
+    && !filters.category
+    && filters.writable === undefined
+    && !filters.duplicateOnly;
 
   return (
     <aside className="sidebar">
@@ -56,13 +64,20 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
           <div className="sidebar-scroll-content">
             <section className="side-section">
               <h2>资料库</h2>
-              <SideItem active={view === 'skills' && !filters.hosts && !filters.health && !filters.duplicateOnly && filters.state === 'active'} icon={<Boxes size={16} />} label="全部 Skills" count={stats?.total} onClick={() => showSkills({ state: 'active' })} />
-              <SideItem active={Boolean(filters.writable)} icon={<Wrench size={16} />} label="可编辑" count={stats?.writable} onClick={() => showSkills({ writable: true, state: 'active' })} />
-              <SideItem active={Boolean(filters.duplicateOnly)} icon={<Copy size={16} />} label="重复项" count={stats?.duplicates} onClick={() => showSkills({ duplicateOnly: true, state: 'active' })} />
-              <SideItem active={filters.health?.includes('error')} icon={<AlertCircle size={16} />} label="错误" count={stats?.errors} tone="red" onClick={() => healthFilter('error')} />
-              <SideItem active={filters.health?.includes('warning')} icon={<TriangleAlert size={16} />} label="需检查" count={stats?.warnings} tone="amber" onClick={() => healthFilter('warning')} />
-              <SideItem active={filters.state === 'disabled'} icon={<CircleOff size={16} />} label="已停用" count={stats?.disabled} onClick={() => showSkills({ state: 'disabled' })} />
-              <SideItem active={filters.state === 'trash'} icon={<ArchiveRestore size={16} />} label="回收站" count={stats?.trashed} onClick={() => showSkills({ state: 'trash' })} />
+              <SideItem active={allSkillsActive} icon={<Boxes size={16} />} label="全部 Skills" count={stats?.total} onClick={() => showSkills({ state: 'active' })} />
+              <SideItem active={view === 'skills' && filters.writable === true} icon={<Wrench size={16} />} label="可编辑" count={stats?.writable} onClick={() => showSkills({ writable: true, state: 'active' })} />
+              <SideItem active={view === 'skills' && Boolean(filters.duplicateOnly)} icon={<Copy size={16} />} label="重复项" count={stats?.duplicates} onClick={() => showSkills({ duplicateOnly: true, state: 'active' })} />
+              <SideItem active={view === 'skills' && filters.health?.includes('error')} icon={<AlertCircle size={16} />} label="错误" count={stats?.errors} tone="red" onClick={() => healthFilter('error')} />
+              <SideItem active={view === 'skills' && filters.health?.includes('warning')} icon={<TriangleAlert size={16} />} label="需检查" count={stats?.warnings} tone="amber" onClick={() => healthFilter('warning')} />
+              <SideItem
+                active={view === 'skills' && filters.state === 'disabled'}
+                icon={<CircleOff size={16} />}
+                label="已停用"
+                count={stats?.disabled}
+                title="Claude / WorkBuddy 插件配置中 enabledPlugins 明确设为 false 的插件内 Skill"
+                onClick={() => showSkills({ state: 'disabled' })}
+              />
+              <SideItem active={view === 'skills' && filters.state === 'trash'} icon={<ArchiveRestore size={16} />} label="回收站" count={stats?.trashed} onClick={() => showSkills({ state: 'trash' })} />
             </section>
 
             <section className="side-section">
@@ -103,7 +118,7 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
         <button type="button" onClick={() => setView('history')} className={view === 'history' ? 'is-active' : ''}><Clock3 size={16} /><span>操作历史</span></button>
         <button type="button" onClick={() => setView('providers')} className={view === 'providers' ? 'is-active' : ''}><Sparkles size={16} /><span>AI 服务</span></button>
         <button type="button" onClick={onManageRoots}><FolderCog size={16} /><span>扫描目录</span></button>
-        <button type="button" onClick={() => setAuthorOpen(true)}><Orbit size={16} /><span>戳戳作者👽</span></button>
+        <button type="button" onClick={() => setAuthorOpen(true)}><Orbit size={16} /><span>暴论哥3.0</span></button>
         <div className="privacy-note"><LockKeyhole size={13} /><span>本地索引 · 密钥由系统保护</span></div>
       </footer>
       <AuthorModal open={authorOpen} onOpenChange={setAuthorOpen} />
@@ -111,6 +126,6 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
   );
 }
 
-function SideItem({ active, icon, label, count, tone, onClick }: { active?: boolean; icon: React.ReactNode; label: string; count?: number; tone?: string; onClick(): void }) {
-  return <button type="button" className={clsx('side-item', active && 'is-active', tone && `tone-${tone}`)} onClick={onClick}>{icon}<span>{label}</span><b>{count ?? 0}</b></button>;
+function SideItem({ active, icon, label, count, tone, title, onClick }: { active?: boolean; icon: React.ReactNode; label: string; count?: number; tone?: string; title?: string; onClick(): void }) {
+  return <button type="button" title={title} className={clsx('side-item', active && 'is-active', tone && `tone-${tone}`)} onClick={onClick}>{icon}<span>{label}</span><b>{count ?? 0}</b></button>;
 }

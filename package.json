@@ -1,7 +1,7 @@
 {
   "name": "skill-workbench",
   "productName": "Skill 管理工作台",
-  "version": "0.1.5",
+  "version": "0.1.8",
   "description": "跨 Codex、Claude 与 WorkBuddy 的本地 Skill 管理工作台",
   "main": ".webpack/main",
   "private": true,

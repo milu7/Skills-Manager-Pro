@@ -429,9 +429,10 @@ code, kbd, .eyebrow { font-family: "Cascadia Code", "SFMono-Regular", Consolas, 
 .dialog-header p { margin: 5px 0 0; color: #7d8797; font-size: 11px; }
 .dialog-body { min-height: 0; overflow: auto; padding: 18px; }
 .dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: #f7f8fa; }
-.author-modal { display: grid; gap: 18px; }
-.author-intro { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 14px; padding: 3px 2px 16px; border-bottom: 1px solid var(--line); }
-.author-avatar { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 8px; color: #fff; background: #1f3153; font-size: 23px; font-weight: 750; box-shadow: inset 0 -10px 20px rgba(36,86,214,.18); }
+.author-modal { display: grid; gap: 20px; }
+.author-intro { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 16px; padding: 2px 2px 18px; border-bottom: 1px solid var(--line); }
+.author-avatar { width: 76px; height: 76px; overflow: hidden; border: 1px solid #d9c9ad; border-radius: 12px; background: #f3e7d2; box-shadow: 0 8px 24px rgba(56, 44, 27, .13); }
+.author-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .author-intro > div:last-child > span { color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .author-intro h3 { margin: 2px 0 4px; font-size: 19px; }
 .author-intro p { max-width: 640px; margin: 0; color: #667285; font-size: 12px; line-height: 1.65; }
@@ -439,18 +440,26 @@ code, kbd, .eyebrow { font-family: "Cascadia Code", "SFMono-Regular", Consolas, 
 .author-section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .author-section h4 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
 .author-section header p { margin: 0; color: #8a94a2; font-size: 10px; }
-.author-contact-grid, .author-reward-grid { display: grid; gap: 10px; }
-.author-contact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.author-reward-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.qr-placeholder-card { display: grid; grid-template-columns: 108px minmax(0, 1fr); align-items: center; gap: 13px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f8fafb; }
-.qr-placeholder-card.is-compact { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; padding: 9px; }
-.qr-placeholder { display: grid; place-content: center; justify-items: center; gap: 6px; width: 108px; aspect-ratio: 1; border: 1px dashed #aeb9c7; border-radius: 6px; color: #7f8da1; background-color: #fff; background-image: linear-gradient(45deg, #f2f5f8 25%, transparent 25%), linear-gradient(-45deg, #f2f5f8 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f2f5f8 75%), linear-gradient(-45deg, transparent 75%, #f2f5f8 75%); background-position: 0 0, 0 5px, 5px -5px, -5px 0; background-size: 10px 10px; text-align: center; }
-.is-compact .qr-placeholder { width: 82px; }
-.qr-placeholder > svg, .qr-placeholder > span { padding: 3px; border-radius: 3px; background: rgba(255,255,255,.9); }
-.qr-placeholder > span { font-size: 9px; font-weight: 650; }
-.qr-placeholder-copy { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
-.qr-placeholder-copy strong { font-size: 13px; }
-.qr-placeholder-copy span { color: #7d8898; font-size: 10px; line-height: 1.45; }
+.author-contact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.author-code-card { display: grid; min-width: 0; min-height: 170px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafb; }
+.author-code-card.is-contact-card { grid-template-columns: 136px minmax(0, 1fr); align-items: stretch; gap: 14px; }
+.author-code-card.is-account-card { grid-template-rows: auto minmax(0, 1fr); align-content: start; justify-items: center; gap: 10px; }
+.author-code-media { overflow: hidden; border: 1px solid #d9dee5; border-radius: 7px; background: #fff; }
+.author-code-media img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.author-code-media.is-square { justify-self: center; width: 136px; aspect-ratio: 1; padding: 8px; }
+.author-code-media.is-wide { align-self: center; width: min(100%, 350px); aspect-ratio: 1710 / 624; border: 0; }
+.author-code-copy { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.is-contact-card .author-code-media { align-self: end; }
+.is-contact-card .author-code-copy { align-self: end; padding-bottom: 4px; }
+.is-account-card .author-code-copy { width: min(100%, 350px); }
+.author-code-copy strong { font-size: 13px; }
+.author-code-copy span { color: #7d8898; font-size: 10px; line-height: 1.45; }
+.author-reward-card { display: grid; grid-template-columns: minmax(0, 1fr) 238px; align-items: stretch; gap: 24px; padding: 16px 20px; border: 1px solid #e3d8c0; border-radius: 8px; background: #fbfaf7; }
+.author-reward-copy { display: flex; align-self: end; flex-direction: column; align-items: flex-start; padding-bottom: 5px; }
+.author-reward-copy > span { margin-bottom: 9px; color: #ad7a18; font-size: 10px; font-weight: 750; letter-spacing: .1em; }
+.author-reward-copy strong { color: #343b47; font-size: 15px; line-height: 1.45; }
+.author-reward-copy p { margin: 8px 0 0; color: #7b7569; font-size: 11px; line-height: 1.65; }
+.author-code-media.is-reward { align-self: center; justify-self: end; width: 238px; aspect-ratio: 1; border-color: #e6dfd2; }
 .onboarding-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .onboarding-grid article { min-height: 180px; padding: 18px 16px; border: 1px solid var(--line); border-radius: 7px; background: #f8fafb; }
 .onboarding-grid article > span { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 28px; border-radius: 6px; color: var(--blue); background: var(--blue-soft); }
@@ -528,8 +537,13 @@ code, kbd, .eyebrow { font-family: "Cascadia Code", "SFMono-Regular", Consolas, 
   .onboarding-grid { grid-template-columns: 1fr; }
   .onboarding-grid article { min-height: auto; }
   .onboarding-grid article > span { margin-bottom: 14px; }
-  .author-reward-grid { grid-template-columns: 1fr; }
-  .qr-placeholder-card.is-compact { grid-template-columns: 82px minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .author-contact-grid, .author-reward-card { grid-template-columns: 1fr; }
+  .author-code-card.is-contact-card { grid-template-columns: 136px minmax(0, 1fr); }
+  .author-code-media.is-wide { max-width: 520px; justify-self: center; }
+  .author-code-media.is-reward { width: min(100%, 238px); justify-self: center; }
 }
 
 @media (max-width: 1250px) {

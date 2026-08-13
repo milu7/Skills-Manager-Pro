@@ -42,11 +42,21 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await page.getByRole('button', { name: '开始浏览' }).click();
     await expect(page.getByText('Skill 管理工作台', { exact: true })).toBeVisible();
     await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toBeVisible();
-    await expect(page.locator('.brand-version')).toHaveText('v0.1.5');
+    await expect(page.locator('.brand-version')).toHaveText('v0.1.8');
     await expect(page.locator('.brand-version i')).toHaveCSS('background-color', 'rgb(32, 164, 122)');
     await expect(page.getByText('来源宿主，不是内容分类', { exact: true })).toBeVisible();
     await expect(page.getByText('仅用于工作台筛选', { exact: true })).toBeVisible();
     await expect.poll(async () => page.locator('.skill-row').count(), { timeout: 15_000 }).toBe(5);
+    const librarySection = page.locator('.side-section').first();
+    const allSkillsFilter = page.getByRole('button', { name: /全部 Skills/ });
+    const writableFilter = page.getByRole('button', { name: /可编辑/ });
+    await writableFilter.click();
+    await expect(writableFilter).toHaveClass(/is-active/);
+    await expect(allSkillsFilter).not.toHaveClass(/is-active/);
+    await expect(librarySection.locator('.side-item.is-active')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /已停用/ })).toHaveAttribute('title', /enabledPlugins.*false/);
+    await allSkillsFilter.click();
+    await expect(allSkillsFilter).toHaveClass(/is-active/);
     await expect(page.locator('.skill-row').filter({ hasText: '视觉审计助手' })).toBeVisible();
     await expect(page.locator('.skill-row').filter({ hasText: 'research-assistant' })).toBeVisible();
     await expect(page.locator('.skill-row').filter({ hasText: 'WorkBuddy 发布助手' })).toBeVisible();
@@ -80,13 +90,65 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await globalSearch.fill('');
     await expect.poll(async () => page.locator('.skill-row').count()).toBe(5);
 
-    await page.getByRole('button', { name: '戳戳作者👽' }).click();
-    const authorDialog = page.getByRole('dialog', { name: '戳戳作者👽' });
+    await page.getByRole('button', { name: '暴论哥3.0', exact: true }).click();
+    const authorDialog = page.getByRole('dialog', { name: '暴论哥3.0', exact: true });
     await expect(authorDialog).toBeVisible();
-    await expect(authorDialog.getByText('暴论哥3.0', { exact: true })).toBeVisible();
-    await expect(authorDialog.getByText('暴论哥3.0（公众号同名）', { exact: true })).toBeVisible();
-    await expect(authorDialog.getByRole('img', { name: /二维码待补充/ })).toHaveCount(5);
+    await expect(authorDialog.locator('.author-intro h3')).toHaveText('暴论哥3.0');
+    await expect(authorDialog.getByRole('img', { name: '暴论哥3.0头像' })).toBeVisible();
+    await expect(authorDialog.getByRole('img', { name: '添加作者微信二维码' })).toBeVisible();
+    await expect(authorDialog.getByRole('img', { name: '暴论哥3.0公众号二维码' })).toBeVisible();
+    await expect(authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' })).toBeVisible();
+    await expect(authorDialog.getByText('二维码待补充')).toHaveCount(0);
+    await expect(authorDialog.locator('.author-reward-card')).toHaveCount(1);
+    const authorImageSizes = await authorDialog.locator('img').evaluateAll((images) => images.map((image) => {
+      const element = image as HTMLImageElement;
+      return {
+        complete: element.complete,
+        naturalWidth: element.naturalWidth,
+        naturalHeight: element.naturalHeight
+      };
+    }));
+    expect(authorImageSizes).toEqual([
+      { complete: true, naturalWidth: 1254, naturalHeight: 1254 },
+      { complete: true, naturalWidth: 400, naturalHeight: 400 },
+      { complete: true, naturalWidth: 1710, naturalHeight: 624 },
+      { complete: true, naturalWidth: 1152, naturalHeight: 1152 }
+    ]);
+    const displayedCodeSizes = await authorDialog.locator('.author-code-media').evaluateAll((elements) => elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { width: Math.round(box.width), height: Math.round(box.height) };
+    }));
+    expect(displayedCodeSizes).toHaveLength(3);
+    expect(displayedCodeSizes[0]!.width).toBeLessThanOrEqual(138);
+    expect(displayedCodeSizes[0]!.height).toBeLessThanOrEqual(138);
+    expect(displayedCodeSizes[1]!.width).toBeLessThanOrEqual(352);
+    expect(displayedCodeSizes[1]!.height).toBeLessThanOrEqual(130);
+    expect(displayedCodeSizes[2]!.width).toBeLessThanOrEqual(240);
+    expect(displayedCodeSizes[2]!.height).toBeLessThanOrEqual(240);
+    const copyAlignment = await authorDialog.evaluate((dialog) => {
+      const contactCode = dialog.querySelector<HTMLElement>('.is-contact-card .author-code-media')!;
+      const contactDetail = dialog.querySelector<HTMLElement>('.is-contact-card .author-code-copy span')!;
+      const rewardCode = dialog.querySelector<HTMLElement>('.author-code-media.is-reward')!;
+      const rewardDetail = dialog.querySelector<HTMLElement>('.author-reward-copy p')!;
+      return {
+        contactBottomDelta: Math.abs(contactCode.getBoundingClientRect().bottom - contactDetail.getBoundingClientRect().bottom),
+        rewardBottomDelta: Math.abs(rewardCode.getBoundingClientRect().bottom - rewardDetail.getBoundingClientRect().bottom)
+      };
+    });
+    expect(copyAlignment.contactBottomDelta).toBeLessThanOrEqual(8);
+    expect(copyAlignment.rewardBottomDelta).toBeLessThanOrEqual(8);
     await page.screenshot({ path: 'test-results/skill-workbench-author.png', fullPage: true });
+    await page.setViewportSize({ width: 1120, height: 720 });
+    const compactAuthorBox = await authorDialog.boundingBox();
+    expect(compactAuthorBox).not.toBeNull();
+    expect(compactAuthorBox!.x).toBeGreaterThanOrEqual(0);
+    expect(compactAuthorBox!.y).toBeGreaterThanOrEqual(0);
+    expect(compactAuthorBox!.x + compactAuthorBox!.width).toBeLessThanOrEqual(1120);
+    expect(compactAuthorBox!.y + compactAuthorBox!.height).toBeLessThanOrEqual(720);
+    await authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' }).scrollIntoViewIfNeeded();
+    await expect(authorDialog.getByRole('img', { name: 'Harry的微信赞赏码' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/skill-workbench-author-compact.png', fullPage: true });
+    await page.setViewportSize({ width: 1500, height: 940 });
     await authorDialog.getByRole('button', { name: '知道了' }).click();
 
     await page.setViewportSize({ width: 1500, height: 520 });

@@ -3,13 +3,14 @@
 import BetterSqlite3 from 'better-sqlite3/win32-x64';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import path from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import * as schema from './schema';
 import { migrations } from './migrations';
 
 export interface DatabaseContext {
   sqlite: BetterSqlite3.Database;
   orm: BetterSQLite3Database<typeof schema>;
+  isNewDatabase: boolean;
 }
 
 let context: DatabaseContext | null = null;
@@ -18,6 +19,7 @@ export function openDatabase(userDataPath: string): DatabaseContext {
   if (context) return context;
   mkdirSync(userDataPath, { recursive: true });
   const dbPath = path.join(userDataPath, 'skill-workbench.sqlite3');
+  const isNewDatabase = !existsSync(dbPath);
   const sqlite = new BetterSqlite3(dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
@@ -31,7 +33,13 @@ export function openDatabase(userDataPath: string): DatabaseContext {
       sqlite.pragma(`user_version = ${migration.version}`);
     })();
   }
-  context = { sqlite, orm: drizzle(sqlite, { schema }) };
+  if (isNewDatabase) {
+    sqlite.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('locale.preference', 'system', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(new Date().toISOString());
+  }
+  context = { sqlite, orm: drizzle(sqlite, { schema }), isNewDatabase };
   return context;
 }
 

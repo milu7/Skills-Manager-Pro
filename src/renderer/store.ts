@@ -9,7 +9,8 @@ import type {
   SkillRoot
 } from '../shared/types';
 
-export type WorkspaceView = 'skills' | 'history' | 'providers';
+export type WorkspaceView = 'skills' | 'history' | 'settings';
+export type SettingsSection = 'general' | 'ai';
 
 interface WorkbenchState {
   initialized: boolean;
@@ -24,13 +25,17 @@ interface WorkbenchState {
   details: SkillDetails | null;
   filters: SkillListFilters;
   view: WorkspaceView;
+  settingsSection: SettingsSection;
   toast: { kind: 'success' | 'error' | 'info'; message: string } | null;
   initialize(): Promise<void>;
+  primeBootstrap(bootstrap: AppBootstrap): void;
   refreshList(preferSelection?: string | null): Promise<void>;
   refreshDetails(): Promise<void>;
   select(id: string): Promise<void>;
   setFilters(filters: Partial<SkillListFilters>, replace?: boolean): Promise<void>;
   setView(view: WorkspaceView): void;
+  setSettingsSection(section: SettingsSection): void;
+  updateLocale(locale: AppBootstrap['locale']): void;
   setProgress(progress: ScanProgress): void;
   updateRoots(roots: SkillRoot[]): void;
   updateProviders(providers: AiProvider[]): void;
@@ -53,12 +58,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   details: null,
   filters: emptyFilters,
   view: 'skills',
+  settingsSection: 'general',
   toast: null,
 
   async initialize() {
+    if (get().initialized || get().loading) return;
     set({ loading: true });
     try {
-      const bootstrap = await window.workbench.app.bootstrap();
+      const bootstrap = get().bootstrap ?? await window.workbench.app.bootstrap();
       const filtered = await window.workbench.skills.list(get().filters);
       const selectedId = filtered.items[0]?.id ?? null;
       set({
@@ -76,6 +83,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({ loading: false, initialized: true, toast: { kind: 'error', message: readableError(error) } });
     }
   },
+
+  primeBootstrap(bootstrap) { set({ bootstrap }); },
 
   async refreshList(preferSelection) {
     const result = await window.workbench.skills.list(get().filters);
@@ -115,6 +124,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
 
   setView(view) { set({ view }); },
+  setSettingsSection(settingsSection) { set({ settingsSection }); },
+  updateLocale(locale) {
+    const bootstrap = get().bootstrap;
+    if (bootstrap) set({ bootstrap: { ...bootstrap, locale } });
+  },
   setProgress(progress) { set({ progress }); },
   updateRoots(roots) { set({ roots }); },
   updateProviders(providers) { set({ providers }); },

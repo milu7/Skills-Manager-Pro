@@ -19,7 +19,7 @@ import type { SkillRow } from './db/schema';
 import { mapRoot } from './roots-service';
 import { parseSkillDocument } from './skill-document';
 import { SkillRepository } from './skill-repository';
-import { createId, detectTextFormat, errorMessage, isPathInside, normalizeFsPath, nowIso, pathExists, sha256, toPosixPath } from './utils';
+import { createId, detectTextFormat, errorMessage, isPathInside, localizeMessage, normalizeFsPath, nowIso, pathExists, sha256, toPosixPath, type MessageTranslator } from './utils';
 import { PluginManifestService } from './plugin-manifest-service';
 
 interface IndexedSkill {
@@ -72,8 +72,14 @@ export class ScannerService {
 
   constructor(
     private readonly database: DatabaseContext,
-    private readonly repository: SkillRepository
-  ) {}
+    private readonly repository: SkillRepository,
+    private readonly translate?: MessageTranslator
+  ) {
+    this.progress = {
+      ...this.progress,
+      phase: this.resourceMessage('messages:scan.idle', this.progress.phase)
+    };
+  }
 
   getProgress(): ScanProgress {
     return { ...this.progress };
@@ -108,7 +114,7 @@ export class ScannerService {
   async rescanSkill(skillId: string): Promise<LocalAnalysisResult> {
     const row = this.repository.getRow(skillId);
     const rootRow = this.database.sqlite.prepare('SELECT * FROM roots WHERE id = ?').get(row.rootId) as Record<string, unknown> | undefined;
-    if (!rootRow) throw new Error('Skill 根目录不存在');
+    if (!rootRow) throw new Error(localizeMessage(this.translate, 'error.skillRootMissing', 'Skill 根目录不存在'));
     const root = mapRoot(rootRow);
     const token = createId();
     const indexed = await this.indexSkill(root, path.join(row.path, 'SKILL.md'), token, row);
@@ -130,7 +136,9 @@ export class ScannerService {
     const startedAt = nowIso();
     this.setProgress({
       running: true,
-      phase: '准备扫描',
+      phase: this.resourceMessage('messages:scan.preparing', '准备扫描'),
+      phaseCode: 'scan.preparing',
+      phaseParams: undefined,
       completedRoots: 0,
       totalRoots: roots.length,
       discoveredSkills: 0,
@@ -143,14 +151,40 @@ export class ScannerService {
       for (let index = 0; index < roots.length; index += 1) {
         const root = roots[index];
         if (!root) continue;
-        this.setProgress({ ...this.progress, phase: `扫描 ${root.label}` });
+        const localizedRootLabel = root.labelCode
+          ? this.resourceMessage(`workbench:roots.label.${root.labelCode}`, root.label)
+          : root.label;
+        this.setProgress({
+          ...this.progress,
+          phase: this.resourceMessage('messages:scan.scanningRoot', `扫描 ${localizedRootLabel}`, { rootLabel: localizedRootLabel }),
+          phaseCode: 'scan.scanningRoot',
+          phaseParams: {
+            rootLabel: root.label,
+            ...(root.labelCode ? { rootLabelCode: root.labelCode } : {})
+          }
+        });
         await this.scanRoot(root);
         this.setProgress({ ...this.progress, completedRoots: index + 1 });
       }
       this.recomputeDuplicates();
-      this.setProgress({ ...this.progress, phase: '索引就绪', running: false, finishedAt: nowIso() });
+      this.setProgress({
+        ...this.progress,
+        phase: this.resourceMessage('messages:scan.ready', '索引就绪'),
+        phaseCode: 'scan.ready',
+        phaseParams: undefined,
+        running: false,
+        finishedAt: nowIso()
+      });
     } catch (error) {
-      this.setProgress({ ...this.progress, phase: '扫描失败', running: false, finishedAt: nowIso(), error: errorMessage(error) });
+      this.setProgress({
+        ...this.progress,
+        phase: this.resourceMessage('messages:scan.failed', '扫描失败'),
+        phaseCode: 'scan.failed',
+        phaseParams: undefined,
+        running: false,
+        finishedAt: nowIso(),
+        error: errorMessage(error)
+      });
     }
     return this.getProgress();
   }
@@ -236,7 +270,9 @@ export class ScannerService {
     const workbuddyName = identity.host === 'workbuddy' ? stringValue(frontmatter.title) : '';
     const workbuddyDescription = identity.host === 'workbuddy' ? stringValue(frontmatter.summary) : '';
     const name = stringValue(frontmatter.name) || workbuddyName || folderName;
-    const description = stringValue(frontmatter.description) || workbuddyDescription || '暂无说明';
+    // Empty metadata is user content, not interface copy. Keep a stable empty
+    // value and let the renderer present its locale-specific placeholder.
+    const description = stringValue(frontmatter.description) || workbuddyDescription;
     const displayOverride = this.database.sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(`display:${normalizeFsPath(skillPath)}`) as { value: string } | undefined;
     const displayName = displayOverride?.value || agentMetadata.displayName || workbuddyName || name;
     const brokenLinks = await inspectLinks(skillPath, parsed.body);
@@ -357,6 +393,16 @@ export class ScannerService {
     this.progress = progress;
     for (const listener of this.listeners) listener(this.getProgress());
   }
+
+  private resourceMessage(key: string, fallback: string, params?: Record<string, string | number>): string {
+    if (!this.translate) return fallback;
+    try {
+      const translated = this.translate(key, params);
+      return translated && translated !== key ? translated : fallback;
+    } catch {
+      return fallback;
+    }
+  }
 }
 
 export function inferIdentity(root: SkillRoot, skillPath: string): {
@@ -470,7 +516,7 @@ async function readAgentMetadata(skillPath: string): Promise<{ exists: boolean; 
     try {
       const raw = await fs.readFile(target, 'utf8');
       const document = parseDocument(raw, { prettyErrors: true, strict: false });
-      if (document.errors.length > 0) return { exists: true, displayName: '', error: document.errors[0]?.message ?? 'YAML 无法解析' };
+      if (document.errors.length > 0) return { exists: true, displayName: '', error: document.errors[0]?.message ?? 'Invalid YAML' };
       const value = document.toJS() as { interface?: { display_name?: unknown } } | null;
       return { exists: true, displayName: stringValue(value?.interface?.display_name) };
     } catch (error) {
@@ -611,5 +657,15 @@ function fileKindOrder(kind: SkillFileEntry['kind']): number {
 }
 
 function emptyProgress(): ScanProgress {
-  return { running: false, phase: '尚未扫描', completedRoots: 0, totalRoots: 0, discoveredSkills: 0, startedAt: null, finishedAt: null, error: null };
+  return {
+    running: false,
+    phase: '尚未扫描',
+    phaseCode: 'scan.idle',
+    completedRoots: 0,
+    totalRoots: 0,
+    discoveredSkills: 0,
+    startedAt: null,
+    finishedAt: null,
+    error: null
+  };
 }

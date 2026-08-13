@@ -26,11 +26,14 @@ import {
   encodeText,
   errorMessage,
   isPathInside,
+  localizeMessage,
   normalizeFsPath,
   nowIso,
   pathExists,
+  safeJsonParse,
   sha256,
-  toPosixPath
+  toPosixPath,
+  type MessageTranslator
 } from './utils';
 
 interface TrashManifest {
@@ -51,7 +54,8 @@ export class OperationsService {
     private readonly database: DatabaseContext,
     private readonly repository: SkillRepository,
     private readonly scanner: ScannerService,
-    private readonly trashPath: string
+    private readonly trashPath: string,
+    private readonly translate?: MessageTranslator
   ) {}
 
   async readText(skillId: string, relativePath: string): Promise<SkillTextFile> {
@@ -75,7 +79,7 @@ export class OperationsService {
   async writeText(input: WriteTextInput): Promise<OperationResult> {
     const row = this.requireWritable(input.skillId);
     const file = this.repository.get(input.skillId).files.find((entry) => entry.relativePath === toPosixPath(input.relativePath));
-    if (!file?.editable) throw new Error('该文本资源为只读或不在已索引文件中');
+    if (!file?.editable) throw new Error(this.message('error.textReadOnly', '该文本资源为只读或不在已索引文件中'));
     return this.writeExistingText(row, input.relativePath, input.content, input.expectedHash, 'edit_file', `编辑 ${input.relativePath}`);
   }
 
@@ -84,7 +88,7 @@ export class OperationsService {
     const current = await this.readText(input.skillId, 'SKILL.md');
     this.assertExpectedHash(current.contentHash, input.expectedHash);
     const parsed = parseSkillDocument(current.content);
-    const updated = updateSkillMetadata(parsed, { name: input.name, description: input.description });
+    const updated = updateSkillMetadata(parsed, { name: input.name, description: input.description }, this.translate);
     return this.writeExistingText(row, 'SKILL.md', updated, input.expectedHash, 'edit_metadata', '修改结构化元数据');
   }
 
@@ -117,7 +121,7 @@ export class OperationsService {
         reversible: false
       });
     })();
-    return { ok: true, message: '分类与标签已保存', skillId: input.skillId };
+    return { ok: true, message: this.message('success.organizationSaved', '分类与标签已保存'), skillId: input.skillId };
   }
 
   async previewRenameDisplay(input: RenameInput): Promise<RenamePreview> {
@@ -129,16 +133,16 @@ export class OperationsService {
       const relativePath = 'agents/openai.yaml';
       const target = path.join(row.path, ...relativePath.split('/'));
       const before = await fs.readFile(target, 'utf8').catch(() => '');
-      changes.push({ relativePath, before, after: updateOpenAiDisplayName(before, input.newName) });
+      changes.push({ relativePath, before, after: updateOpenAiDisplayName(before, input.newName, this.translate) });
     } else if (row.host === 'workbuddy') {
       const main = await this.readText(row.id, 'SKILL.md');
       changes.push({
         relativePath: 'SKILL.md',
         before: main.content,
-        after: updateArbitraryFrontmatterField(parseSkillDocument(main.content), 'title', input.newName)
+        after: updateArbitraryFrontmatterField(parseSkillDocument(main.content), 'title', input.newName, this.translate)
       });
     } else {
-      warnings.push('该宿主没有独立显示名字段；此名称只保存在工作台索引中，不修改 Skill 文件。');
+      warnings.push(this.message('warning.aliasOnly', '该宿主没有独立显示名字段；此名称只保存在工作台索引中，不修改 Skill 文件。'));
     }
     return {
       skillId: row.id,
@@ -157,7 +161,7 @@ export class OperationsService {
     let snapshotId: string | null = null;
     if (preview.changes.length > 0) {
       const change = preview.changes[0];
-      if (!change) throw new Error('显示名预览为空');
+      if (!change) throw new Error(this.message('error.displayPreviewEmpty', '显示名预览为空'));
       const relative = change.relativePath;
       const target = path.join(row.path, ...relative.split('/'));
       await fs.mkdir(path.dirname(target), { recursive: true });
@@ -184,7 +188,7 @@ export class OperationsService {
       relativePath: preview.changes[0]?.relativePath ?? null, metadata: { oldValue: row.displayName, newValue: input.newName }, reversible: Boolean(snapshotId)
     });
     await this.scanner.rescanSkill(row.id);
-    return { ok: true, message: '显示名已修改', skillId: row.id, actionId };
+    return { ok: true, message: this.message('success.displayRenamed', '显示名已修改'), skillId: row.id, actionId };
   }
 
   async previewRenameInternal(input: RenameInput): Promise<RenamePreview> {
@@ -192,28 +196,28 @@ export class OperationsService {
     await this.assertMainHash(row, input.expectedHash);
     const targetPath = path.join(path.dirname(row.path), input.newName);
     if (normalizeFsPath(targetPath) !== normalizeFsPath(row.path) && await pathExists(targetPath)) {
-      throw new Error(`目标目录已存在：${targetPath}`);
+      throw new Error(this.message('error.targetExists', `目标目录已存在：${targetPath}`, { path: targetPath }));
     }
     const main = await this.readText(row.id, 'SKILL.md');
-    let updatedMain = updateSkillMetadata(parseSkillDocument(main.content), { name: input.newName });
+    let updatedMain = updateSkillMetadata(parseSkillDocument(main.content), { name: input.newName }, this.translate);
     updatedMain = replaceKnownSelfReferences(updatedMain, row.name, input.newName);
     const changes: RenamePreview['changes'] = [{ relativePath: 'SKILL.md', before: main.content, after: updatedMain }];
     const metadataPath = path.join(row.path, 'agents', 'openai.yaml');
     if (await pathExists(metadataPath)) {
       const before = await fs.readFile(metadataPath, 'utf8');
-      const after = updateOpenAiSelfReferences(before, row.name, input.newName);
+      const after = updateOpenAiSelfReferences(before, row.name, input.newName, this.translate);
       if (after !== before) changes.push({ relativePath: 'agents/openai.yaml', before, after });
     }
     const warnings: string[] = [];
-    if (row.host === 'claude') warnings.push('Claude 的斜杠命令通常由目录名决定，本操作会同步重命名目录。');
-    if (changes.some((change) => change.after.includes(row.name))) warnings.push('仍有旧名称文本，请在差异中确认是否属于普通说明。');
+    if (row.host === 'claude') warnings.push(this.message('warning.claudeRename', 'Claude 的斜杠命令通常由目录名决定，本操作会同步重命名目录。'));
+    if (changes.some((change) => change.after.includes(row.name))) warnings.push(this.message('warning.oldNameText', '仍有旧名称文本，请在差异中确认是否属于普通说明。'));
     return { skillId: row.id, mode: 'internal', oldValue: row.name, newValue: input.newName, targetPath, changes, warnings };
   }
 
   async renameInternal(input: RenameInput): Promise<OperationResult> {
     const row = this.requireWritable(input.skillId);
     const preview = await this.previewRenameInternal(input);
-    if (!preview.targetPath) throw new Error('缺少目标目录');
+    if (!preview.targetPath) throw new Error(this.message('error.targetMissing', '缺少目标目录'));
     const targetPath = preview.targetPath;
     const snapshots: Array<{ relativePath: string; content: string; newline: 'lf' | 'crlf'; hasBom: boolean; id: string }> = [];
     for (const change of preview.changes) {
@@ -251,7 +255,8 @@ export class OperationsService {
       for (const snapshot of snapshots) {
         await atomicWriteFile(path.join(activePath, ...snapshot.relativePath.split('/')), encodeText(snapshot.content, snapshot.newline, snapshot.hasBom)).catch(() => undefined);
       }
-      throw new Error(`内部改名失败并已尝试回滚：${errorMessage(error)}`);
+      const detail = errorMessage(error);
+      throw new Error(this.message('error.renameRollback', `内部改名失败并已尝试回滚：${detail}`, { error: detail }));
     }
     const actionId = this.insertAction({
       skillId: row.id, action: 'rename_internal', path: targetPath, summary: `内部名称：${row.name} → ${input.newName}`,
@@ -260,29 +265,29 @@ export class OperationsService {
       metadata: { oldPath: row.path, newPath: targetPath, oldName: row.name, newName: input.newName }, reversible: false
     });
     await this.scanner.rescanSkill(row.id);
-    return { ok: true, message: '内部名称与目录已修改', skillId: row.id, actionId };
+    return { ok: true, message: this.message('success.internalRenamed', '内部名称与目录已修改'), skillId: row.id, actionId };
   }
 
   async moveToTrash(skillId: string): Promise<OperationResult> {
     const row = this.requireWritable(skillId);
-    if (!['user', 'project'].includes(row.sourceType)) throw new Error('只有用户和项目来源可以移入工作台回收站');
+    if (!['user', 'project'].includes(row.sourceType)) throw new Error(this.message('error.trashSourceOnly', '只有用户和项目来源可以移入工作台回收站'));
     await fs.mkdir(this.trashPath, { recursive: true });
-    if (!isPathInside(this.trashPath, path.join(this.trashPath, `${row.id}--${row.folderName}`))) throw new Error('回收站目标路径无效');
+    if (!isPathInside(this.trashPath, path.join(this.trashPath, `${row.id}--${row.folderName}`))) throw new Error(this.message('error.trashTargetInvalid', '回收站目标路径无效'));
     const destination = path.join(this.trashPath, `${row.id}--${safeFileName(row.folderName)}`);
-    if (await pathExists(destination)) throw new Error('回收站中已存在同一 Skill，请先恢复或处理冲突');
+    if (await pathExists(destination)) throw new Error(this.message('error.trashConflict', '回收站中已存在同一 Skill，请先恢复或处理冲突'));
     const manifest: TrashManifest = {
       version: 1, skillId: row.id, originalPath: row.path, rootId: row.rootId, host: row.host,
       scope: row.scope, sourceType: row.sourceType, writable: row.writable, contentHash: row.contentHash, trashedAt: nowIso()
     };
     await fs.writeFile(path.join(row.path, '.skill-workbench-trash.json'), JSON.stringify(manifest, null, 2), 'utf8');
     try {
-      await moveDirectoryVerified(row.path, destination);
+      await moveDirectoryVerified(row.path, destination, this.translate);
     } catch (error) {
       await fs.rm(path.join(row.path, '.skill-workbench-trash.json'), { force: true }).catch(() => undefined);
       throw error;
     }
     const trashRoot = this.database.sqlite.prepare("SELECT id FROM roots WHERE source_type = 'trash' LIMIT 1").get() as { id: string } | undefined;
-    if (!trashRoot) throw new Error('工作台回收站根目录未初始化');
+    if (!trashRoot) throw new Error(this.message('error.trashRootMissing', '工作台回收站根目录未初始化'));
     this.database.sqlite.prepare(`
       UPDATE skills SET root_id = ?, path = ?, normalized_path = ?, real_path = ?, original_path = ?,
         source_type = 'trash', scope = 'system', state = 'trash', writable = 0 WHERE id = ?
@@ -290,23 +295,23 @@ export class OperationsService {
     const actionId = this.insertAction({
       skillId: row.id, action: 'trash', path: destination, summary: `移入回收站：${row.displayName}`,
       beforeHash: row.contentHash, afterHash: row.contentHash, snapshotId: null, afterContent: null,
-      relativePath: null, metadata: manifest, reversible: true
+      relativePath: null, metadata: { ...manifest, displayName: row.displayName }, reversible: true
     });
     await this.scanner.rescanSkill(row.id);
-    return { ok: true, message: '已移入工作台回收站，可随时恢复', skillId: row.id, actionId };
+    return { ok: true, message: this.message('success.movedTrash', '已移入工作台回收站，可随时恢复'), skillId: row.id, actionId };
   }
 
   async restore(skillId: string): Promise<OperationResult> {
     const row = this.repository.getRow(skillId);
-    if (row.state !== 'trash' || row.sourceType !== 'trash') throw new Error('该 Skill 不在工作台回收站中');
+    if (row.state !== 'trash' || row.sourceType !== 'trash') throw new Error(this.message('error.notInTrash', '该 Skill 不在工作台回收站中'));
     const manifestPath = path.join(row.path, '.skill-workbench-trash.json');
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as TrashManifest;
-    if (manifest.skillId !== skillId || !manifest.originalPath) throw new Error('回收站清单无效');
-    if (await pathExists(manifest.originalPath)) throw new Error(`原位置已被占用：${manifest.originalPath}`);
+    if (manifest.skillId !== skillId || !manifest.originalPath) throw new Error(this.message('error.trashManifestInvalid', '回收站清单无效'));
+    if (await pathExists(manifest.originalPath)) throw new Error(this.message('error.originalOccupied', `原位置已被占用：${manifest.originalPath}`, { path: manifest.originalPath }));
     const rootExists = this.database.sqlite.prepare('SELECT id FROM roots WHERE id = ?').get(manifest.rootId) as { id: string } | undefined;
-    if (!rootExists) throw new Error('原 Skill 根目录配置已移除，请重新添加项目根后再恢复');
+    if (!rootExists) throw new Error(this.message('error.originalRootMissing', '原 Skill 根目录配置已移除，请重新添加项目根后再恢复'));
     await fs.mkdir(path.dirname(manifest.originalPath), { recursive: true });
-    await moveDirectoryVerified(row.path, manifest.originalPath);
+    await moveDirectoryVerified(row.path, manifest.originalPath, this.translate);
     await fs.rm(path.join(manifest.originalPath, '.skill-workbench-trash.json'), { force: true });
     this.database.sqlite.prepare(`
       UPDATE skills SET root_id = ?, path = ?, normalized_path = ?, real_path = ?, original_path = NULL,
@@ -316,20 +321,45 @@ export class OperationsService {
     const actionId = this.insertAction({
       skillId: row.id, action: 'restore', path: manifest.originalPath, summary: `恢复：${row.displayName}`,
       beforeHash: row.contentHash, afterHash: row.contentHash, snapshotId: null, afterContent: null,
-      relativePath: null, metadata: manifest, reversible: false
+      relativePath: null, metadata: { ...manifest, displayName: row.displayName }, reversible: false
     });
     await this.scanner.rescanSkill(row.id);
-    return { ok: true, message: '已恢复到原位置', skillId: row.id, actionId };
+    return { ok: true, message: this.message('success.restored', '已恢复到原位置'), skillId: row.id, actionId };
   }
 
   history(limit = 100): ActionLog[] {
-    const rows = this.database.sqlite.prepare('SELECT * FROM actions ORDER BY created_at DESC LIMIT ?').all(Math.min(Math.max(limit, 1), 1000)) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      id: String(row.id), skillId: row.skill_id ? String(row.skill_id) : null, action: row.action as ActionType,
-      path: String(row.path), summary: String(row.summary), beforeHash: row.before_hash ? String(row.before_hash) : null,
-      afterHash: row.after_hash ? String(row.after_hash) : null, snapshotId: row.snapshot_id ? String(row.snapshot_id) : null,
-      createdAt: String(row.created_at), reversible: Boolean(row.reversible)
-    }));
+    const rows = this.database.sqlite.prepare(`
+      SELECT a.*,
+        aa.provider_name AS analysis_provider_name,
+        aa.model AS analysis_model,
+        aa.output_locale AS analysis_output_locale
+      FROM actions a
+      LEFT JOIN ai_analyses aa ON aa.id = CASE
+        WHEN json_valid(a.metadata_json) THEN json_extract(a.metadata_json, '$.analysisId')
+        ELSE NULL
+      END
+      ORDER BY a.created_at DESC
+      LIMIT ?
+    `).all(Math.min(Math.max(limit, 1), 1000)) as Array<Record<string, unknown>>;
+    return rows.map((row) => {
+      const action = row.action as ActionType;
+      const storedMetadata = safeJsonParse<unknown>(row.metadata_json ? String(row.metadata_json) : null, {});
+      const metadata = action === 'ai_analyze'
+        ? {
+            ...objectValue(storedMetadata),
+            providerName: stringValue(objectValue(storedMetadata).providerName) || stringValue(row.analysis_provider_name),
+            model: stringValue(objectValue(storedMetadata).model) || stringValue(row.analysis_model),
+            outputLocale: stringValue(objectValue(storedMetadata).outputLocale) || stringValue(row.analysis_output_locale)
+          }
+        : storedMetadata;
+      return {
+        id: String(row.id), skillId: row.skill_id ? String(row.skill_id) : null, action,
+        path: String(row.path), summary: String(row.summary), beforeHash: row.before_hash ? String(row.before_hash) : null,
+        afterHash: row.after_hash ? String(row.after_hash) : null, snapshotId: row.snapshot_id ? String(row.snapshot_id) : null,
+        createdAt: String(row.created_at), reversible: Boolean(row.reversible),
+        descriptor: buildActionDescriptor(action, metadata, row.relative_path ? String(row.relative_path) : null)
+      };
+    });
   }
 
   showDiff(actionId: string): { before: string; after: string; relativePath: string } {
@@ -337,13 +367,13 @@ export class OperationsService {
       SELECT a.relative_path, a.after_content, s.content AS before_content
       FROM actions a LEFT JOIN snapshots s ON s.id = a.snapshot_id WHERE a.id = ?
     `).get(actionId) as { relative_path: string | null; after_content: string | null; before_content: string | null } | undefined;
-    if (!row) throw new Error('历史记录不存在');
+    if (!row) throw new Error(this.message('error.historyMissing', '历史记录不存在'));
     return { before: row.before_content ?? '', after: row.after_content ?? '', relativePath: row.relative_path ?? '' };
   }
 
   async restoreSnapshot(snapshotId: string): Promise<OperationResult> {
     const snapshot = this.database.sqlite.prepare('SELECT * FROM snapshots WHERE id = ?').get(snapshotId) as Record<string, unknown> | undefined;
-    if (!snapshot) throw new Error('快照不存在');
+    if (!snapshot) throw new Error(this.message('error.snapshotMissing', '快照不存在'));
     const skillId = String(snapshot.skill_id);
     const row = this.requireWritable(skillId);
     const relativePath = String(snapshot.relative_path);
@@ -381,24 +411,24 @@ export class OperationsService {
       afterHash, snapshotId, afterContent: newText, metadata: {}, reversible: true
     });
     await this.scanner.rescanSkill(row.id);
-    return { ok: true, message: '保存成功', skillId: row.id, actionId };
+    return { ok: true, message: this.message('success.saved', '保存成功'), skillId: row.id, actionId };
   }
 
   private requireWritable(skillId: string): SkillRow {
     const row = this.repository.getRow(skillId);
-    if (!row.writable || !['user', 'project'].includes(row.sourceType)) throw new Error('该来源为只读，不能修改文件');
+    if (!row.writable || !['user', 'project'].includes(row.sourceType)) throw new Error(this.message('error.sourceReadOnly', '该来源为只读，不能修改文件'));
     return row;
   }
 
   private async resolveSkillTextPath(row: SkillRow, relativePath: string, forWrite: boolean): Promise<string> {
-    assertSafeRelativePath(relativePath);
+    assertSafeRelativePath(relativePath, this.translate);
     const target = path.resolve(row.path, ...relativePath.replace(/\\/g, '/').split('/'));
-    if (!isPathInside(row.path, target)) throw new Error('文件路径越过了 Skill 目录');
+    if (!isPathInside(row.path, target)) throw new Error(this.message('error.pathEscapesSkill', '文件路径越过了 Skill 目录'));
     const stat = await fs.stat(target).catch(() => null);
-    if (!stat?.isFile()) throw new Error('文本资源不存在');
+    if (!stat?.isFile()) throw new Error(this.message('error.textMissing', '文本资源不存在'));
     const real = await fs.realpath(target);
-    if (!isPathInside(row.realPath, real)) throw new Error('符号链接指向 Skill 目录之外');
-    if (forWrite && !row.writable) throw new Error('该 Skill 为只读');
+    if (!isPathInside(row.realPath, real)) throw new Error(this.message('error.symlinkOutside', '符号链接指向 Skill 目录之外'));
+    if (forWrite && !row.writable) throw new Error(this.message('error.skillReadOnly', '该 Skill 为只读'));
     return target;
   }
 
@@ -408,7 +438,7 @@ export class OperationsService {
   }
 
   private assertExpectedHash(actual: string, expected: string): void {
-    if (actual !== expected) throw new Error('文件已被外部修改，已阻止覆盖。请刷新后比较冲突内容。');
+    if (actual !== expected) throw new Error(this.message('error.externalModified', '文件已被外部修改，已阻止覆盖。请刷新后比较冲突内容。'));
   }
 
   private createSnapshot(
@@ -450,6 +480,75 @@ export class OperationsService {
       input.afterHash, input.afterContent, input.snapshotId, JSON.stringify(input.metadata), nowIso(), Number(input.reversible));
     return id;
   }
+
+  private message(key: string, fallback: string, params?: Record<string, string | number>): string {
+    return localizeMessage(this.translate, key, fallback, params);
+  }
+}
+
+export function buildActionDescriptor(
+  action: ActionType,
+  metadata: unknown,
+  relativePath: string | null = null
+): NonNullable<ActionLog['descriptor']> {
+  const record = objectValue(metadata);
+  const descriptor = (params?: Record<string, string | number>): NonNullable<ActionLog['descriptor']> => ({
+    code: action,
+    ...(params && Object.keys(params).length > 0 ? { params } : {})
+  });
+  switch (action) {
+    case 'edit_file':
+      return descriptor(optionalParams({ path: stringValue(record.relativePath) || relativePath || '' }));
+    case 'edit_metadata':
+    case 'edit_body':
+      return descriptor();
+    case 'rename_display':
+      return descriptor(optionalParams({
+        before: stringValue(record.oldValue),
+        after: stringValue(record.newValue)
+      }));
+    case 'rename_internal':
+      return descriptor(optionalParams({
+        before: stringValue(record.oldName),
+        after: stringValue(record.newName)
+      }));
+    case 'trash':
+    case 'restore': {
+      const originalPath = stringValue(record.originalPath);
+      return descriptor(optionalParams({
+        name: stringValue(record.displayName) || (originalPath ? path.basename(originalPath) : '')
+      }));
+    }
+    case 'restore_snapshot':
+      return descriptor(optionalParams({
+        path: stringValue(record.relativePath) || relativePath || '',
+        snapshotCreatedAt: stringValue(record.snapshotCreatedAt)
+      }));
+    case 'organize': {
+      const after = objectValue(record.after);
+      const tags = Array.isArray(after.tags) ? after.tags : [];
+      return descriptor(optionalParams({ category: stringValue(after.category), tagCount: tags.length }));
+    }
+    case 'ai_analyze':
+      return descriptor(optionalParams({
+        provider: stringValue(record.providerName),
+        model: stringValue(record.model),
+        outputLocale: stringValue(record.outputLocale)
+      }));
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function optionalParams(values: Record<string, string | number>): Record<string, string | number> | undefined {
+  const entries = Object.entries(values).filter(([, value]) => typeof value === 'number' || value.length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function languageFor(relativePath: string): SkillTextFile['language'] {
@@ -461,17 +560,23 @@ function languageFor(relativePath: string): SkillTextFile['language'] {
   return 'text';
 }
 
-function updateOpenAiDisplayName(raw: string, displayName: string): string {
+function updateOpenAiDisplayName(raw: string, displayName: string, translate?: MessageTranslator): string {
   const document = parseDocument(raw || '{}', { keepSourceTokens: true, prettyErrors: true, strict: false });
-  if (document.errors.length > 0) throw new Error(`agents/openai.yaml 无法解析：${document.errors[0]?.message}`);
+  if (document.errors.length > 0) {
+    const error = document.errors[0]?.message ?? '';
+    throw new Error(localizeMessage(translate, 'error.metadataYamlInvalid', `agents/openai.yaml 无法解析：${error}`, { error }));
+  }
   if (!document.get('interface')) document.set('interface', {});
   document.setIn(['interface', 'display_name'], displayName);
   return document.toString({ lineWidth: 0 });
 }
 
-function updateOpenAiSelfReferences(raw: string, oldName: string, newName: string): string {
+function updateOpenAiSelfReferences(raw: string, oldName: string, newName: string, translate?: MessageTranslator): string {
   const document = parseDocument(raw, { keepSourceTokens: true, prettyErrors: true, strict: false });
-  if (document.errors.length > 0) throw new Error(`agents/openai.yaml 无法解析：${document.errors[0]?.message}`);
+  if (document.errors.length > 0) {
+    const error = document.errors[0]?.message ?? '';
+    throw new Error(localizeMessage(translate, 'error.metadataYamlInvalid', `agents/openai.yaml 无法解析：${error}`, { error }));
+  }
   const prompt = document.getIn(['interface', 'default_prompt']);
   if (typeof prompt === 'string') document.setIn(['interface', 'default_prompt'], replaceInvocationReferences(prompt, oldName, newName));
   return document.toString({ lineWidth: 0 });
@@ -504,11 +609,11 @@ async function renameDirectorySafely(source: string, target: string): Promise<vo
   await fs.rename(source, target);
 }
 
-async function moveDirectoryVerified(source: string, destination: string): Promise<void> {
+async function moveDirectoryVerified(source: string, destination: string, translate?: MessageTranslator): Promise<void> {
   const sourceResolved = path.resolve(source);
   const destinationResolved = path.resolve(destination);
   if (sourceResolved === path.parse(sourceResolved).root || destinationResolved === path.parse(destinationResolved).root) {
-    throw new Error('拒绝对磁盘根目录执行移动');
+    throw new Error(localizeMessage(translate, 'error.diskRootMove', '拒绝对磁盘根目录执行移动'));
   }
   try {
     await fs.rename(sourceResolved, destinationResolved);
@@ -520,7 +625,7 @@ async function moveDirectoryVerified(source: string, destination: string): Promi
   const [sourceHash, destinationHash] = await Promise.all([hashDirectory(sourceResolved), hashDirectory(destinationResolved)]);
   if (sourceHash !== destinationHash) {
     await fs.rm(destinationResolved, { recursive: true, force: true });
-    throw new Error('跨盘复制校验失败，原目录保持不变');
+    throw new Error(localizeMessage(translate, 'error.crossDiskVerify', '跨盘复制校验失败，原目录保持不变'));
   }
   await fs.rm(sourceResolved, { recursive: true, force: true });
 }

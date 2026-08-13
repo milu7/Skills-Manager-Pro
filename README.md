@@ -1,4 +1,4 @@
-# Skill 管理工作台
+# Skills Manager Pro
 
 Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude、WorkBuddy 与项目目录中的 Skill。Skill 文件仍保留在原位置；数据库只保存索引、分类、标签、历史快照和 AI 分析结果。
 
@@ -8,7 +8,7 @@ Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude�
 
 <p align="center">
   <a href="docs/images/software-preview/overview.png">
-    <img src="docs/images/software-preview/overview.png" alt="Skill 管理工作台统一索引与详情概览" width="100%">
+    <img src="docs/images/software-preview/overview.png" alt="Skills Manager Pro 统一索引与详情概览" width="100%">
   </a>
   <br>
   <sub>统一索引、来源识别、状态筛选与 Skill 详情概览</sub>
@@ -89,7 +89,7 @@ npm.cmd run smoke:packaged
 
 ## 数据与安全边界
 
-- 打包版默认数据目录为 Electron 的 `userData` 目录，Windows 通常位于 `%APPDATA%\Skill 管理工作台`。
+- 为保证升级后继续读取原有索引，打包版沿用历史数据目录 `%APPDATA%\Skill 管理工作台`；对外软件名称为 `Skills Manager Pro`。
 - 索引数据库为 `skill-workbench.sqlite3`，工作台回收站为同目录下的 `trash`。
 - API Key 与自定义敏感请求头经 Electron `safeStorage` 加密后才写入数据库；界面和 IPC 不回传明文密钥。
 - 用户和项目来源默认可写；插件、内置、市场、缓存和备份默认只读。

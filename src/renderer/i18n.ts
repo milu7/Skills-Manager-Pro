@@ -29,7 +29,7 @@ export function applyDocumentLocale(locale: string): void {
   const resolved = normalizeLocale(locale);
   document.documentElement.lang = resolved;
   document.documentElement.dir = i18n.isInitialized ? i18n.dir(resolved) : 'ltr';
-  document.title = i18n.isInitialized ? i18n.t('common:app.title') : resolved === 'en-US' ? 'Skill Workbench' : 'Skill 管理工作台';
+  document.title = i18n.isInitialized ? i18n.t('common:app.title') : 'Skills Manager Pro';
 }
 
 export function normalizeLocale(locale: string | null | undefined): 'zh-CN' | 'en-US' {

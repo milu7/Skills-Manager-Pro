@@ -85,10 +85,11 @@ code, kbd, .eyebrow { font-family: "Cascadia Code", "SFMono-Regular", Consolas, 
 .side-item.tone-red svg { color: var(--red); }
 .side-item.tone-amber svg { color: var(--amber); }
 .side-host { grid-template-columns: 25px 1fr auto; }
-.host-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; font: 700 10px/1 "Cascadia Code", monospace; }
-.host-codex { color: #fff; background: #263040; }
-.host-claude { color: #754027; background: #f0dbcc; }
-.host-workbuddy { color: #126b5b; background: #d7eee8; }
+.host-mark { display: grid; place-items: center; width: 22px; height: 22px; overflow: hidden; border-radius: 5px; }
+.host-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.host-codex { border: 1px solid #d8dde5; background: #fff; }
+.host-codex img { padding: 3px; }
+.host-claude, .host-workbuddy { background: transparent; }
 .host-custom { color: #59409c; background: #e9e1fb; }
 .side-categories button { grid-template-columns: 1fr auto; padding-left: 29px; }
 .sidebar-footer { padding: 10px 11px 12px; border-top: 1px solid var(--line); }

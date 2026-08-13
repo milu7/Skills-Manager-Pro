@@ -1,4 +1,4 @@
-import { AlertCircle, ArchiveRestore, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Orbit, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertCircle, ArchiveRestore, Bot, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Orbit, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 import type { HostPlatform, SkillHealth } from '../../shared/types';
@@ -6,12 +6,15 @@ import { useWorkbenchStore } from '../store';
 import { AuthorModal } from './AuthorModal';
 import { useTranslation } from 'react-i18next';
 import { translatedCategory, translatedHost } from '../i18n';
+import codexIcon from '../assets/platform-codex.svg';
+import claudeIcon from '../assets/platform-claude.svg';
+import workbuddyIcon from '../assets/platform-workbuddy.png';
 
-const hosts: Array<{ id: HostPlatform; mark: string }> = [
-  { id: 'codex', mark: 'CX' },
-  { id: 'claude', mark: 'CL' },
-  { id: 'workbuddy', mark: 'WB' },
-  { id: 'custom', mark: 'AG' }
+const hosts: Array<{ id: HostPlatform; icon?: string }> = [
+  { id: 'codex', icon: codexIcon },
+  { id: 'claude', icon: claudeIcon },
+  { id: 'workbuddy', icon: workbuddyIcon },
+  { id: 'custom' }
 ];
 
 export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
@@ -90,7 +93,7 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
               <p className="side-section-note">{t('workbench:sidebar.platformsHelp')}</p>
               {hosts.map((host) => (
                 <button key={host.id} type="button" title={host.id === 'custom' ? t('workbench:sidebar.customHelp') : t('workbench:sidebar.hostHelp', { host: translatedHost(t, host.id) })} className={clsx('side-host', filters.hosts?.includes(host.id) && view === 'skills' && 'is-active')} onClick={() => showSkills({ hosts: [host.id], state: 'active' })}>
-                  <span className={`host-mark host-${host.id}`}>{host.mark}</span><span>{translatedHost(t, host.id)}</span><b>{stats?.byHost[host.id] ?? 0}</b>
+                  <span className={`host-mark host-${host.id}`} aria-hidden="true">{host.icon ? <img src={host.icon} alt="" /> : <Bot size={15} />}</span><span>{translatedHost(t, host.id)}</span><b>{stats?.byHost[host.id] ?? 0}</b>
                 </button>
               ))}
             </section>

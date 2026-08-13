@@ -25,6 +25,10 @@ let watcher: WatchService | null = null;
 // userData root. This makes tests and portable diagnostics genuinely isolated.
 if (process.env.SKILL_WORKBENCH_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.SKILL_WORKBENCH_USER_DATA));
+} else {
+  // Renaming the product must not strand an existing catalog in a new folder.
+  // Keep the established storage location while the visible product name evolves.
+  app.setPath('userData', path.join(app.getPath('appData'), 'Skill 管理工作台'));
 }
 
 if (process.platform === 'win32') {

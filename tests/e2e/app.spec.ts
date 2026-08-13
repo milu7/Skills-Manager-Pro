@@ -42,13 +42,19 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
       BrowserWindow.getAllWindows()[0]?.isMenuBarVisible() ?? true
     ));
     expect(menuVisibleAfterAlt).toBe(false);
-    await expect(page.getByRole('dialog', { name: '欢迎来到 Skill 管理工作台' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: '欢迎来到 Skills Manager Pro' })).toBeVisible();
     await page.getByRole('button', { name: '开始浏览' }).click();
-    await expect(page.getByText('Skill 管理工作台', { exact: true })).toBeVisible();
+    await expect(page.getByText('Skills Manager Pro', { exact: true })).toBeVisible();
     await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toBeVisible();
-    await expect(page.locator('.brand-version')).toHaveText('v0.2.0');
+    await expect(page.locator('.brand-version')).toHaveText('v0.2.1');
     await expect(page.locator('.brand-version i')).toHaveCSS('background-color', 'rgb(32, 164, 122)');
     await expect(page.getByText('来源宿主，不是内容分类', { exact: true })).toBeVisible();
+    const productIcons = page.locator('.side-host .host-mark img');
+    await expect(productIcons).toHaveCount(3);
+    expect(await productIcons.evaluateAll((images) => images.every((image) => (
+      image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+    )))).toBe(true);
+    await expect(page.locator('.side-host .host-custom svg')).toHaveCount(1);
     await expect.poll(async () => page.locator('.skill-row').count(), { timeout: 15_000 }).toBe(5);
     await expect(page.getByText('仅用于工作台筛选', { exact: true })).toBeVisible();
     const librarySection = page.locator('.side-section').first();
@@ -233,7 +239,7 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     expect(toggleSize.width).toBeLessThanOrEqual(18);
     expect(toggleSize.height).toBeLessThanOrEqual(18);
     await page.screenshot({ path: 'test-results/skill-workbench-settings.png', fullPage: true });
-    await page.getByRole('button', { name: 'Skill 管理工作台首页' }).click();
+    await page.getByRole('button', { name: 'Skills Manager Pro 首页' }).click();
     await page.getByRole('button', { name: '批量 AI' }).click();
     const batchDialog = page.getByRole('dialog', { name: '批量 AI 分析确认' });
     await expect(batchDialog).toBeVisible();
@@ -277,7 +283,7 @@ test('switches to English immediately, preserves user content, and restores the 
     application = await launchWorkbench(userData, projectRoot);
     let page = await application.firstWindow();
     await setWindowSize(application, 1120, 720);
-    const guide = page.getByRole('dialog', { name: '欢迎来到 Skill 管理工作台' });
+    const guide = page.getByRole('dialog', { name: '欢迎来到 Skills Manager Pro' });
     await expect(guide).toBeVisible();
     await guide.getByRole('button', { name: '开始浏览' }).click();
     await expect.poll(async () => page.locator('.skill-row').count(), { timeout: 15_000 }).toBeGreaterThan(0);
@@ -293,9 +299,9 @@ test('switches to English immediately, preserves user content, and restores the 
       lang: document.documentElement.lang,
       dir: document.documentElement.dir,
       title: document.title
-    }))).toEqual({ lang: 'en-US', dir: 'ltr', title: 'Skill Workbench' });
+    }))).toEqual({ lang: 'en-US', dir: 'ltr', title: 'Skills Manager Pro' });
     await expect.poll(async () => application!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle()))
-      .toBe('Skill Workbench');
+      .toBe('Skills Manager Pro');
 
     await page.getByTestId('settings-ai-tab').click();
     await expect(page.getByRole('heading', { name: 'AI services', exact: true })).toBeVisible();
@@ -315,7 +321,7 @@ test('switches to English immediately, preserves user content, and restores the 
     await expect(page.getByRole('status')).toContainText('Only HTTP or HTTPS addresses are supported');
     await page.getByRole('button', { name: 'Close notification' }).click();
 
-    await page.getByRole('button', { name: 'Skill Workbench home' }).click();
+    await page.getByRole('button', { name: 'Skills Manager Pro home' }).click();
     await expect(page.getByRole('button', { name: 'Baolunge 3.0', exact: true })).toBeVisible();
     await expect(page.locator('.skill-row').filter({ hasText: '视觉审计助手' })).toBeVisible();
     await expect(page.locator('.skill-row').filter({ hasText: '为本地产品界面提供视觉审计、排版和色彩建议。' })).toBeVisible();
@@ -354,10 +360,10 @@ test('switches to English immediately, preserves user content, and restores the 
     page = await application.firstWindow();
     await setWindowSize(application, 1120, 720);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
-    await expect(page.getByText('Skill Workbench', { exact: true })).toBeVisible();
+    await expect(page.getByText('Skills Manager Pro', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /All Skills/ })).toBeVisible();
     await expect.poll(async () => application!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle()))
-      .toBe('Skill Workbench');
+      .toBe('Skills Manager Pro');
   } finally {
     await application?.close();
     await fs.rm(testRoot, { recursive: true, force: true });

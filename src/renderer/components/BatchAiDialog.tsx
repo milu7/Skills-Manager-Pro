@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AiInputPreview, SkillInstallation } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
 import { Modal, formatBytes } from './common';
+import { useTranslation } from 'react-i18next';
+import { activeLocale } from '../i18n';
 
 interface BatchItem {
   skill: SkillInstallation;
@@ -19,6 +21,7 @@ export function BatchAiDialog({
   skills: SkillInstallation[];
   onOpenChange(open: boolean): void;
 }) {
+  const { t } = useTranslation();
   const allProviders = useWorkbenchStore((state) => state.providers);
   const providers = useMemo(() => allProviders.filter((provider) => provider.enabled), [allProviders]);
   const notify = useWorkbenchStore((state) => state.notify);
@@ -60,7 +63,8 @@ export function BatchAiDialog({
           skillId: item.skill.id,
           providerId,
           attachments: [],
-          expectedHash: item.skill.contentHash
+          expectedHash: item.skill.contentHash,
+          outputLocale: activeLocale()
         });
         completed += 1;
       } catch {
@@ -70,8 +74,8 @@ export function BatchAiDialog({
     }
     currentSkillId.current = null;
     setRunning(false);
-    if (cancelled.current) notify('info', `批量分析已停止 · 完成 ${completed}，失败 ${failed}`);
-    else notify(failed ? 'error' : 'success', `批量分析结束 · 完成 ${completed}，失败 ${failed}`);
+    if (cancelled.current) notify('info', t('workbench:batch.stopped', { completed, failed }));
+    else notify(failed ? 'error' : 'success', t('workbench:batch.finished', { completed, failed }));
   };
 
   const cancel = async () => {
@@ -86,28 +90,28 @@ export function BatchAiDialog({
     <Modal
       open={open}
       onOpenChange={(next) => { if (!running) onOpenChange(next); }}
-      title="批量 AI 分析确认"
-      description="批量模式只发送下列 Skill 的 SKILL.md，不发送附件；每个结果都独立缓存，且不会自动应用。"
+      title={t('workbench:batch.title')}
+      description={t('workbench:batch.detail')}
       size="large"
       footer={(
         <>
-          <span className="footer-note">{running ? `进度 ${progress.completed + progress.failed} / ${readyCount}` : `确认 ${readyCount} 个文件 · ${formatBytes(totalBytes)}`}</span>
+          <span className="footer-note">{running ? t('workbench:batch.progress', { done: progress.completed + progress.failed, total: readyCount }) : t('workbench:batch.confirmFiles', { count: readyCount, size: formatBytes(totalBytes) })}</span>
           {running
-            ? <button type="button" className="button danger" onClick={() => void cancel()}>停止后续请求</button>
-            : <button type="button" className="button" onClick={() => onOpenChange(false)}>返回</button>}
+            ? <button type="button" className="button danger" onClick={() => void cancel()}>{t('workbench:batch.stop')}</button>
+            : <button type="button" className="button" onClick={() => onOpenChange(false)}>{t('action.back')}</button>}
           <button type="button" className="button primary" disabled={loading || running || !providerId || readyCount === 0} onClick={() => void run()}>
             {running ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
-            确认分析 {readyCount} 个
+            {t('workbench:batch.confirm', { count: readyCount })}
           </button>
         </>
       )}
     >
       <div className="batch-ai-header">
-        <div><FileLock2 size={18} /><span>脚本、二进制和 references 附件不会进入本次批量请求。</span></div>
-        <label><span>服务</span><select value={providerId} onChange={(event) => setProviderId(event.target.value)}>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>)}</select></label>
+        <div><FileLock2 size={18} /><span>{t('workbench:batch.privacy')}</span></div>
+        <label><span>{t('workbench:batch.provider')}</span><select value={providerId} onChange={(event) => setProviderId(event.target.value)}>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>)}</select></label>
       </div>
       <div className="batch-ai-list">
-        {loading && <div className="batch-loading"><LoaderCircle className="spin" size={18} />正在生成每个 Skill 的发送清单…</div>}
+        {loading && <div className="batch-loading"><LoaderCircle className="spin" size={18} />{t('workbench:batch.loading')}</div>}
         {!loading && items.map((item) => (
           <div className="batch-ai-row" key={item.skill.id}>
             <span className={`host-mark host-${item.skill.host}`}>{item.skill.host.slice(0, 2).toUpperCase()}</span>

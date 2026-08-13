@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import {
   organizationSchema,
+  localePreferenceSchema,
   renameSchema,
   runAiSchema,
   saveProviderSchema,
@@ -17,9 +18,11 @@ import type { DatabaseContext } from './db/database';
 import { AiService } from './ai-service';
 import { OperationsService } from './operations-service';
 import { NoteService } from './note-service';
+import { LocalizationService } from './localization-service';
 import { ProviderService } from './provider-service';
 import { RootsService } from './roots-service';
 import { ScannerService } from './scanner-service';
+import { SettingsService } from './settings-service';
 import { SkillRepository } from './skill-repository';
 import { isPathInside } from './utils';
 import { WatchService } from './watch-service';
@@ -36,6 +39,8 @@ export interface IpcServices {
   operations: OperationsService;
   notes: NoteService;
   providers: ProviderService;
+  settings: SettingsService;
+  localization: LocalizationService;
   ai: AiService;
   watcher: WatchService;
   userDataPath: string;
@@ -46,7 +51,18 @@ export interface IpcServices {
 export function registerIpc(services: IpcServices): () => void {
   const channels: string[] = [];
   const handle = (channel: string, listener: Parameters<typeof ipcMain.handle>[1]) => {
-    ipcMain.handle(channel, listener);
+    ipcMain.handle(channel, async (...args) => {
+      try {
+        return await listener(...args);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          const issue = error.issues[0];
+          const messageKey = issue?.message.startsWith('i18n:') ? issue.message.slice('i18n:'.length) : 'invalidInput';
+          throw new Error(services.localization.t(`messages:main.error.validation.${messageKey}`));
+        }
+        throw error;
+      }
+    });
     channels.push(channel);
   };
 
@@ -56,13 +72,14 @@ export function registerIpc(services: IpcServices): () => void {
     providers: services.providers.list(),
     scanProgress: services.scanner.getProgress(),
     version: services.version,
-    userDataPath: services.userDataPath
+    userDataPath: services.userDataPath,
+    locale: services.settings.getLocaleState()
   }));
 
   handle(IPC.APP_OPEN_PATH, async (_event, value: unknown) => {
     const target = path.resolve(pathSchema.parse(value));
     const allowed = services.roots.list().some((root) => isPathInside(root.path, target)) || isPathInside(services.userDataPath, target);
-    if (!allowed) throw new Error('只能打开已配置根目录内的路径');
+    if (!allowed) throw new Error(services.localization.t('messages:main.error.openPathNotAllowed'));
     const result = await shell.openPath(target);
     if (result) throw new Error(result);
   });
@@ -75,7 +92,10 @@ export function registerIpc(services: IpcServices): () => void {
     return roots;
   });
   handle(IPC.ROOTS_PICK_ADD, async () => {
-    const result = await dialog.showOpenDialog(services.mainWindow, { properties: ['openDirectory'], title: '添加项目根目录' });
+    const result = await dialog.showOpenDialog(services.mainWindow, {
+      properties: ['openDirectory'],
+      title: services.localization.t('messages:dialog.addRootTitle')
+    });
     if (result.canceled || !result.filePaths[0]) return services.roots.list();
     const roots = await services.roots.add(result.filePaths[0]);
     await services.watcher.reset(roots);
@@ -109,8 +129,8 @@ export function registerIpc(services: IpcServices): () => void {
     const skillId = idSchema.parse(value);
     const result = await dialog.showOpenDialog(services.mainWindow, {
       properties: ['openFile'],
-      title: '插入备注图片',
-      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+      title: services.localization.t('messages:dialog.insertNoteImageTitle'),
+      filters: [{ name: services.localization.t('messages:dialog.imageFilterName'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
     });
     if (result.canceled || !result.filePaths[0]) return null;
     return services.notes.addImage(skillId, result.filePaths[0]);
@@ -126,6 +146,13 @@ export function registerIpc(services: IpcServices): () => void {
   handle(IPC.PROVIDERS_SAVE, (_event, value: unknown) => services.providers.save(saveProviderSchema.parse(value)));
   handle(IPC.PROVIDERS_TEST, (_event, value: unknown) => services.providers.test(idSchema.parse(value)));
   handle(IPC.PROVIDERS_REMOVE, (_event, value: unknown) => services.providers.remove(idSchema.parse(value)));
+
+  handle(IPC.SETTINGS_SET_LOCALE_PREFERENCE, async (_event, value: unknown) => {
+    const state = services.settings.setLocalePreference(localePreferenceSchema.parse(value));
+    await services.localization.changeLocale(state.resolvedLocale);
+    services.mainWindow.setTitle(services.localization.t('common:app.title'));
+    return state;
+  });
 
   handle(IPC.HISTORY_LIST, (_event, value: unknown) => services.operations.history(z.number().int().min(1).max(1000).optional().parse(value)));
   handle(IPC.HISTORY_DIFF, (_event, value: unknown) => services.operations.showDiff(idSchema.parse(value)));

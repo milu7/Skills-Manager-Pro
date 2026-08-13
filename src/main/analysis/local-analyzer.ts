@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { DiagnosticSeverity, HostPlatform, SkillDiagnostic, SkillHealth } from '../../shared/types';
-import type { ParsedSkillDocument } from '../skill-document';
+import { UNTERMINATED_FRONTMATTER_ERROR, type ParsedSkillDocument } from '../skill-document';
 
 export const INITIAL_CATEGORIES = [
   '写作内容',
@@ -55,7 +55,16 @@ export interface AnalyzeDocumentInput {
 export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] {
   const diagnostics: SkillDiagnostic[] = [];
   for (const error of input.parsed.errors) {
-    diagnostics.push({ code: 'yaml-invalid', severity: 'error', title: 'YAML 无法解析', message: error });
+    if (error === UNTERMINATED_FRONTMATTER_ERROR) {
+      diagnostics.push({
+        code: 'frontmatter-unclosed',
+        severity: 'error',
+        title: 'YAML 无法解析',
+        message: 'YAML frontmatter 缺少结束分隔符'
+      });
+    } else {
+      diagnostics.push({ code: 'yaml-invalid', severity: 'error', title: 'YAML 无法解析', message: error, params: { error } });
+    }
   }
   const metadata = input.parsed.frontmatter;
   const name = stringValue(metadata.name) || (input.host === 'workbuddy' ? stringValue(metadata.title) : '');
@@ -76,7 +85,8 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
       code: 'name-folder-mismatch',
       severity: 'warning',
       title: '名称与目录不一致',
-      message: `内部名称“${name}”与目录“${input.folderName}”不同。`
+      message: `内部名称“${name}”与目录“${input.folderName}”不同。`,
+      params: { name, folderName: input.folderName }
     });
   }
   if (!description) {
@@ -100,7 +110,12 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
       code: 'main-file-large',
       severity: 'warning',
       title: '主文件较大',
-      message: `SKILL.md 为 ${formatBytes(input.mainFileBytes)}，已超过默认 AI 附件上限。`
+      message: `SKILL.md 为 ${formatBytes(input.mainFileBytes)}，已超过默认 AI 附件上限。`,
+      params: {
+        sizeBytes: input.mainFileBytes,
+        size: formatBytes(input.mainFileBytes),
+        formattedSize: formatBytes(input.mainFileBytes)
+      }
     });
   }
   if (input.hasScripts) {
@@ -116,7 +131,8 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
       code: 'binary-present',
       severity: 'info',
       title: '包含二进制资源',
-      message: `发现 ${input.binaryCount} 个二进制文件，不会发送给 AI。`
+      message: `发现 ${input.binaryCount} 个二进制文件，不会发送给 AI。`,
+      params: { count: input.binaryCount }
     });
   }
   if (input.agentMetadataError) {
@@ -125,6 +141,7 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
       severity: 'warning',
       title: 'Codex UI 元数据损坏',
       message: input.agentMetadataError,
+      params: { error: input.agentMetadataError },
       relativePath: 'agents/openai.yaml'
     });
   }
@@ -134,6 +151,7 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
       severity: broken.outside ? 'error' : 'warning',
       title: broken.outside ? '引用越过 Skill 目录' : '引用文件不存在',
       message: broken.outside ? `引用“${broken.path}”指向 Skill 目录之外。` : `找不到引用“${broken.path}”。`,
+      params: { path: broken.path },
       relativePath: broken.path
     });
   }

@@ -1,4 +1,7 @@
 import { parseDocument, type Document } from 'yaml';
+import { localizeMessage, type MessageTranslator } from './utils';
+
+export const UNTERMINATED_FRONTMATTER_ERROR = 'skill-workbench:frontmatter-unclosed';
 
 export interface ParsedSkillDocument {
   raw: string;
@@ -45,7 +48,7 @@ export function parseSkillDocument(raw: string): ParsedSkillDocument {
       body: normalized,
       frontmatter: {},
       document: null,
-      errors: normalized.startsWith('---') ? ['YAML frontmatter 缺少结束分隔符'] : [],
+      errors: normalized.startsWith('---') ? [UNTERMINATED_FRONTMATTER_ERROR] : [],
       hasFrontmatter: false
     };
   }
@@ -80,10 +83,11 @@ function stringifyDocument(document: Document.Parsed): string {
 
 export function updateSkillMetadata(
   parsed: ParsedSkillDocument,
-  updates: { name?: string; description?: string }
+  updates: { name?: string; description?: string },
+  translate?: MessageTranslator
 ): string {
   if (parsed.errors.length > 0) {
-    throw new Error('YAML frontmatter 已损坏，请先在高级文本编辑器中修复');
+    throw new Error(localizeMessage(translate, 'error.frontmatterDamagedEdit', 'YAML frontmatter 已损坏，请先在高级文本编辑器中修复'));
   }
   const document = parsed.document ?? parseDocument('');
   if (updates.name !== undefined) document.set('name', updates.name);
@@ -98,8 +102,13 @@ export function updateSkillBody(parsed: ParsedSkillDocument, body: string): stri
   return `---\n${parsed.frontmatterRaw}\n---\n\n${normalizedBody}`;
 }
 
-export function updateArbitraryFrontmatterField(parsed: ParsedSkillDocument, key: string, value: string): string {
-  if (parsed.errors.length > 0) throw new Error('YAML frontmatter 已损坏，无法安全修改');
+export function updateArbitraryFrontmatterField(
+  parsed: ParsedSkillDocument,
+  key: string,
+  value: string,
+  translate?: MessageTranslator
+): string {
+  if (parsed.errors.length > 0) throw new Error(localizeMessage(translate, 'error.frontmatterDamagedModify', 'YAML frontmatter 已损坏，无法安全修改'));
   const document = parsed.document ?? parseDocument('');
   document.set(key, value);
   const yaml = stringifyDocument(document);

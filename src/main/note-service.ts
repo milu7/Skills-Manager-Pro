@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { SaveSkillNoteInput, SkillNote, SkillNoteImage } from '../shared/types';
 import type { DatabaseContext } from './db/database';
-import { createId, nowIso } from './utils';
+import { createId, localizeMessage, nowIso, type MessageTranslator } from './utils';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -22,7 +22,10 @@ interface ImageRow {
 }
 
 export class NoteService {
-  constructor(private readonly database: DatabaseContext) {}
+  constructor(
+    private readonly database: DatabaseContext,
+    private readonly translate?: MessageTranslator
+  ) {}
 
   get(skillId: string): SkillNote {
     this.requireSkill(skillId);
@@ -49,10 +52,10 @@ export class NoteService {
   async addImage(skillId: string, filePath: string): Promise<SkillNoteImage> {
     this.requireSkill(skillId);
     const content = await fs.readFile(filePath);
-    if (content.length === 0) throw new Error('图片文件为空');
-    if (content.length > MAX_IMAGE_BYTES) throw new Error('单张备注图片不能超过 8 MB');
+    if (content.length === 0) throw new Error(localizeMessage(this.translate, 'error.noteImageEmpty', '图片文件为空'));
+    if (content.length > MAX_IMAGE_BYTES) throw new Error(localizeMessage(this.translate, 'error.noteImageTooLarge', '单张备注图片不能超过 8 MB'));
     const mimeType = detectRasterImage(content);
-    if (!mimeType) throw new Error('仅支持 PNG、JPEG、GIF 或 WebP 图片');
+    if (!mimeType) throw new Error(localizeMessage(this.translate, 'error.noteImageType', '仅支持 PNG、JPEG、GIF 或 WebP 图片'));
     const id = createId();
     const createdAt = nowIso();
     const filename = path.basename(filePath).slice(0, 240);
@@ -67,7 +70,7 @@ export class NoteService {
     this.requireSkill(skillId);
     this.database.sqlite.transaction(() => {
       const result = this.database.sqlite.prepare('DELETE FROM skill_note_images WHERE id = ? AND skill_id = ?').run(imageId, skillId);
-      if (result.changes === 0) throw new Error('备注图片不存在');
+      if (result.changes === 0) throw new Error(localizeMessage(this.translate, 'error.noteImageMissing', '备注图片不存在'));
       const row = this.database.sqlite.prepare('SELECT body FROM skill_notes WHERE skill_id = ?').get(skillId) as { body: string } | undefined;
       if (row) {
         const marker = `skill-note-image:${imageId}`;
@@ -80,7 +83,7 @@ export class NoteService {
 
   private requireSkill(skillId: string): void {
     const exists = this.database.sqlite.prepare('SELECT 1 FROM skills WHERE id = ?').get(skillId);
-    if (!exists) throw new Error('Skill 不存在或尚未建立索引');
+    if (!exists) throw new Error(localizeMessage(this.translate, 'error.skillNotIndexed', 'Skill 不存在或尚未建立索引'));
   }
 }
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: Codex 测试 Skill
+  short_description: 用于自动化测试
+  default_prompt: Use $codex-fixture to test the workbench.

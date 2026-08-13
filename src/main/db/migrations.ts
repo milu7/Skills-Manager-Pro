@@ -75,5 +75,13 @@ export const migrations = [
       );
       CREATE INDEX IF NOT EXISTS skill_note_images_skill_idx ON skill_note_images(skill_id);
     `
+  },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE ai_analyses ADD COLUMN output_locale TEXT NOT NULL DEFAULT 'zh-CN';
+      INSERT OR IGNORE INTO settings (key, value, updated_at)
+      VALUES ('locale.preference', 'zh-CN', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+    `
   }
 ] as const;

@@ -47,6 +47,9 @@ const api: WorkbenchApi = {
     test: (id) => ipcRenderer.invoke(IPC.PROVIDERS_TEST, id),
     remove: (id) => ipcRenderer.invoke(IPC.PROVIDERS_REMOVE, id)
   },
+  settings: {
+    setLocalePreference: (preference) => ipcRenderer.invoke(IPC.SETTINGS_SET_LOCALE_PREFERENCE, preference)
+  },
   history: {
     list: (limit) => ipcRenderer.invoke(IPC.HISTORY_LIST, limit),
     showDiff: (id) => ipcRenderer.invoke(IPC.HISTORY_DIFF, id),

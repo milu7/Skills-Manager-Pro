@@ -9,8 +9,10 @@ import { RootManager } from './RootManager';
 import { HistoryPanel } from './HistoryPanel';
 import { ProviderSettings } from './ProviderSettings';
 import { FirstRunGuide, hasSeenFirstRunGuide } from './FirstRunGuide';
+import { useTranslation } from 'react-i18next';
 
 export function App() {
+  const { t } = useTranslation();
   const initialize = useWorkbenchStore((state) => state.initialize);
   const initialized = useWorkbenchStore((state) => state.initialized);
   const refreshList = useWorkbenchStore((state) => state.refreshList);
@@ -32,7 +34,7 @@ export function App() {
     return (
       <div className="splash-screen">
         <div className="splash-mark"><span>S</span><i /></div>
-        <p>正在打开 Skill 索引…</p>
+        <p>{t('workbench:splash')}</p>
       </div>
     );
   }
@@ -63,7 +65,7 @@ export function App() {
         <div className={`toast toast-${toast.kind}`} role="status">
           {toast.kind === 'error' ? <AlertTriangle size={17} /> : toast.kind === 'info' ? <RefreshCw size={17} /> : <span className="toast-dot" />}
           <span>{toast.message}</span>
-          <button type="button" onClick={clearToast} aria-label="关闭通知"><X size={15} /></button>
+          <button type="button" onClick={clearToast} aria-label={t('common:action.closeNotification')}><X size={15} /></button>
         </div>
       )}
     </div>

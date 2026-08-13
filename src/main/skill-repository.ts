@@ -13,15 +13,20 @@ import type {
   SkillScope,
   SkillSourceType,
   SkillState,
-  SkillStats
+  SkillStats,
+  SupportedLocale
 } from '../shared/types';
 import type { DatabaseContext } from './db/database';
 import { skills as skillsTable, type SkillRow } from './db/schema';
-import { safeJsonParse } from './utils';
+import { localizeMessage, safeJsonParse, type MessageTranslator } from './utils';
 import { eq } from 'drizzle-orm';
 
 export class SkillRepository {
-  constructor(private readonly database: DatabaseContext) {}
+  constructor(
+    private readonly database: DatabaseContext,
+    private readonly getResolvedLocale: () => SupportedLocale = () => 'zh-CN',
+    private readonly translate?: MessageTranslator
+  ) {}
 
   list(filters: SkillListFilters = {}): SkillListResult {
     const rows = this.database.orm.select().from(skillsTable).all();
@@ -49,7 +54,7 @@ export class SkillRepository {
       const healthOrder = { error: 0, warning: 1, healthy: 2 };
       const healthDifference = healthOrder[left.health] - healthOrder[right.health];
       if (healthDifference !== 0) return healthDifference;
-      return left.displayName.localeCompare(right.displayName, 'zh-CN');
+      return left.displayName.localeCompare(right.displayName, this.getResolvedLocale());
     });
     const total = items.length;
     const offset = filters.offset ?? 0;
@@ -58,14 +63,14 @@ export class SkillRepository {
     return {
       items,
       total,
-      stats: buildStats(all),
+      stats: buildStats(all, this.getResolvedLocale()),
       scanInProgress: false
     };
   }
 
   get(id: string): SkillDetails {
     const row = this.database.orm.select().from(skillsTable).where(eq(skillsTable.id, id)).get();
-    if (!row) throw new Error('Skill 不存在或已被外部移除');
+    if (!row) throw new Error(localizeMessage(this.translate, 'error.skillNotFound', 'Skill 不存在或已被外部移除'));
     const skill = mapSkillRow(row);
     const family = buildFamily(this.database.orm.select().from(skillsTable).all(), skill);
     return {
@@ -81,7 +86,7 @@ export class SkillRepository {
 
   getRow(id: string): SkillRow {
     const row = this.database.orm.select().from(skillsTable).where(eq(skillsTable.id, id)).get();
-    if (!row) throw new Error('Skill 不存在或已被外部移除');
+    if (!row) throw new Error(localizeMessage(this.translate, 'error.skillNotFound', 'Skill 不存在或已被外部移除'));
     return row;
   }
 
@@ -90,9 +95,13 @@ export class SkillRepository {
   }
 
   latestAnalysis(skillId: string, currentHash: string): AiAnalysis | null {
+    const resolvedLocale = this.getResolvedLocale();
     const row = this.database.sqlite.prepare(`
-      SELECT * FROM ai_analyses WHERE skill_id = ? ORDER BY created_at DESC LIMIT 1
-    `).get(skillId) as Record<string, unknown> | undefined;
+      SELECT * FROM ai_analyses
+      WHERE skill_id = ?
+      ORDER BY CASE WHEN output_locale = ? THEN 0 ELSE 1 END, created_at DESC
+      LIMIT 1
+    `).get(skillId, resolvedLocale) as Record<string, unknown> | undefined;
     if (!row) return null;
     const payload = safeJsonParse<AiAnalysisPayload>(String(row.payload_json), {
       summary: '', capabilities: [], recommendedCategory: '未分类', tags: [], triggerQuality: 'weak',
@@ -109,6 +118,7 @@ export class SkillRepository {
       stale: String(row.content_hash) !== currentHash,
       inputFiles: safeJsonParse<string[]>(String(row.input_files_json), []),
       inputBytes: Number(row.input_bytes),
+      outputLocale: row.output_locale === 'en-US' ? 'en-US' : 'zh-CN',
       createdAt: String(row.created_at),
       ...payload
     };
@@ -173,7 +183,7 @@ export function mapSkillRow(row: SkillRow): SkillInstallation {
   };
 }
 
-function buildStats(skills: SkillInstallation[]): SkillStats {
+function buildStats(skills: SkillInstallation[], locale: SupportedLocale): SkillStats {
   const active = skills.filter((skill) => skill.state === 'active' || skill.state === 'unknown');
   const categories = new Map<string, number>();
   const bySource: Partial<Record<SkillSourceType, number>> = {};
@@ -195,6 +205,6 @@ function buildStats(skills: SkillInstallation[]): SkillStats {
     bySource,
     categories: [...categories.entries()]
       .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, locale))
   };
 }

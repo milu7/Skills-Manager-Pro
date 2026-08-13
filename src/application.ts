@@ -5,9 +5,11 @@ import { closeDatabase, openDatabase } from './main/db/database';
 import { registerIpc } from './main/ipc';
 import { OperationsService } from './main/operations-service';
 import { NoteService } from './main/note-service';
+import { LocalizationService } from './main/localization-service';
 import { ProviderService } from './main/provider-service';
 import { RootsService } from './main/roots-service';
 import { ScannerService } from './main/scanner-service';
+import { SettingsService } from './main/settings-service';
 import { SkillRepository } from './main/skill-repository';
 import { WatchService } from './main/watch-service';
 import packageJson from '../package.json';
@@ -23,6 +25,10 @@ let watcher: WatchService | null = null;
 // userData root. This makes tests and portable diagnostics genuinely isolated.
 if (process.env.SKILL_WORKBENCH_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.SKILL_WORKBENCH_USER_DATA));
+} else {
+  // Renaming the product must not strand an existing catalog in a new folder.
+  // Keep the established storage location while the visible product name evolves.
+  app.setPath('userData', path.join(app.getPath('appData'), 'Skill 管理工作台'));
 }
 
 if (process.platform === 'win32') {
@@ -43,21 +49,25 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   const userDataPath = app.getPath('userData');
   const database = openDatabase(userDataPath);
-  const roots = new RootsService(database, userDataPath);
+  const settings = new SettingsService(database, () => app.getPreferredSystemLanguages());
+  const localization = new LocalizationService();
+  await localization.initialize(settings.resolvedLocale);
+  const translate = (key: string, params?: Record<string, string | number>) => localization.t(key, params);
+  const roots = new RootsService(database, userDataPath, translate);
   await roots.initializeDefaults();
   await roots.addTestRootIfConfigured();
-  const repository = new SkillRepository(database);
-  const scanner = new ScannerService(database, repository);
-  const providers = new ProviderService(database);
+  const repository = new SkillRepository(database, () => settings.resolvedLocale, translate);
+  const scanner = new ScannerService(database, repository, translate);
+  const providers = new ProviderService(database, translate);
   const trashPath = path.join(userDataPath, 'trash');
-  const operations = new OperationsService(database, repository, scanner, trashPath);
-  const notes = new NoteService(database);
-  const ai = new AiService(database, repository, operations, providers);
+  const operations = new OperationsService(database, repository, scanner, trashPath, translate);
+  const notes = new NoteService(database, translate);
+  const ai = new AiService(database, repository, operations, providers, () => settings.resolvedLocale, translate);
   watcher = new WatchService(scanner);
 
-  mainWindow = createWindow();
+  mainWindow = createWindow(localization);
   disposeIpc = registerIpc({
-    database, roots, repository, scanner, operations, notes, providers, ai, watcher,
+    database, roots, repository, scanner, operations, notes, providers, settings, localization, ai, watcher,
     userDataPath, version: packageJson.version, mainWindow
   });
   await mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
@@ -78,7 +88,7 @@ app.on('before-quit', () => {
   closeDatabase();
 });
 
-function createWindow(): BrowserWindow {
+function createWindow(localization: LocalizationService): BrowserWindow {
   const window = new BrowserWindow({
     width: 1500,
     height: 940,
@@ -86,7 +96,7 @@ function createWindow(): BrowserWindow {
     minHeight: 720,
     show: false,
     backgroundColor: '#F2F5F7',
-    title: 'Skills Manager Pro',
+    title: localization.t('common:app.title'),
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       nodeIntegration: false,
@@ -95,6 +105,10 @@ function createWindow(): BrowserWindow {
       webSecurity: true,
       devTools: !app.isPackaged
     }
+  });
+  window.on('page-title-updated', (event) => {
+    event.preventDefault();
+    window.setTitle(localization.t('common:app.title'));
   });
   window.once('ready-to-show', () => window.show());
   window.webContents.setWindowOpenHandler(({ url }) => {

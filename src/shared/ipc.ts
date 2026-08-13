@@ -31,6 +31,7 @@ export const IPC = {
   PROVIDERS_SAVE: 'providers:save',
   PROVIDERS_TEST: 'providers:test',
   PROVIDERS_REMOVE: 'providers:remove',
+  SETTINGS_SET_LOCALE_PREFERENCE: 'settings:set-locale-preference',
   HISTORY_LIST: 'history:list',
   HISTORY_DIFF: 'history:diff',
   HISTORY_RESTORE: 'history:restore',

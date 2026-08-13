@@ -48,7 +48,7 @@ describe('workbench integration', () => {
     legacy.close();
 
     const upgraded = openDatabase(userData);
-    expect(Number(upgraded.sqlite.pragma('user_version', { simple: true }))).toBe(2);
+    expect(Number(upgraded.sqlite.pragma('user_version', { simple: true }))).toBe(3);
     const tables = upgraded.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
     expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(['skills', 'skill_notes', 'skill_note_images']));
   });
@@ -85,7 +85,9 @@ describe('workbench integration', () => {
     const saved = await fs.readFile(path.join(harness.skillPath, 'SKILL.md'));
     expect(saved.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
     expect(saved.toString('utf8')).toContain('\r\n');
-    expect(harness.operations.history().some((action) => action.action === 'edit_body' && action.snapshotId)).toBe(true);
+    expect(harness.operations.history().some((action) =>
+      action.action === 'edit_body' && action.snapshotId && action.descriptor?.code === 'edit_body'
+    )).toBe(true);
 
     const current = harness.repository.get(harness.skillId);
     await fs.appendFile(path.join(harness.skillPath, 'SKILL.md'), '\r\nExternal edit', 'utf8');
@@ -178,6 +180,41 @@ describe('workbench integration', () => {
     expect(first.summary).toBe('结构清晰的测试 Skill。');
     expect(second.id).toBe(first.id);
     expect(calls).toBe(1);
+    expect(first.outputLocale).toBe('zh-CN');
+    expect(harness.database.sqlite.prepare('SELECT output_locale FROM ai_analyses WHERE id = ?').get(first.id)).toEqual({ output_locale: 'zh-CN' });
+    expect(harness.operations.history().find((action) => action.action === 'ai_analyze')?.descriptor).toMatchObject({
+      code: 'ai_analyze', params: { provider: 'Mock', model: 'mock-model', outputLocale: 'zh-CN' }
+    });
+  });
+
+  it('isolates AI cache entries and latest results by output locale', async () => {
+    const harness = await createHarness();
+    let calls = 0;
+    const prompts: string[] = [];
+    const serverUrl = await startServer(async (request, response) => {
+      calls += 1;
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      prompts.push(Buffer.concat(chunks).toString('utf8'));
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(aiPayload()) } }] }));
+    });
+    const provider = fakeProvider('chat_completions', serverUrl);
+    let locale: 'zh-CN' | 'en-US' = 'zh-CN';
+    const repository = new SkillRepository(harness.database, () => locale);
+    const ai = new AiService(harness.database, repository, harness.operations, { getRuntime: () => provider } as never, () => locale);
+    const skill = repository.get(harness.skillId);
+    const baseInput = { skillId: skill.id, providerId: provider.id, attachments: [], expectedHash: skill.contentHash };
+    const zh = await ai.run({ ...baseInput, outputLocale: 'zh-CN' });
+    locale = 'en-US';
+    const en = await ai.run({ ...baseInput, outputLocale: 'en-US' });
+    const enCached = await ai.run({ ...baseInput, outputLocale: 'en-US' });
+    expect(zh.id).not.toBe(en.id);
+    expect(enCached.id).toBe(en.id);
+    expect(calls).toBe(2);
+    expect(prompts[0]).toContain('所有自然语言分析字段使用简体中文');
+    expect(prompts[1]).toContain('human-readable analysis fields in English');
+    expect(repository.latestAnalysis(skill.id, skill.contentHash)?.outputLocale).toBe('en-US');
   });
 
   it('falls back from unsupported JSON Schema, validates JSON, redacts secrets, and supports cancellation', async () => {

@@ -4,6 +4,7 @@ import type { RenamePreview, SkillDetails } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
 import { DiffView } from './DiffView';
 import { Field, Modal } from './common';
+import { useTranslation } from 'react-i18next';
 
 export function RenameDialog({
   open,
@@ -16,6 +17,7 @@ export function RenameDialog({
   skill: SkillDetails;
   mode: 'display' | 'internal';
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [preview, setPreview] = useState<RenamePreview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,18 +60,18 @@ export function RenameDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="wide"
-      title={mode === 'display' ? '修改显示名' : '修改内部名称'}
-      description={mode === 'display' ? '只改变用户看到的标题；宿主不支持时保存为工作台别名。' : '会同步检查目录、已知调用名称、Codex UI 元数据和自引用。'}
-      footer={<><button className="button secondary" type="button" onClick={() => onOpenChange(false)}>取消</button>{preview ? <button className="button primary" type="button" disabled={busy} onClick={() => void confirm()}>{busy && <LoaderCircle className="spin" size={15} />}确认执行</button> : <button className="button primary" type="button" disabled={busy || !name.trim()} onClick={() => void loadPreview()}>{busy && <LoaderCircle className="spin" size={15} />}预检差异</button>}</>}
+      title={mode === 'display' ? t('workbench:rename.displayTitle') : t('workbench:rename.internalTitle')}
+      description={mode === 'display' ? t('workbench:rename.displayDetail') : t('workbench:rename.internalDetail')}
+      footer={<><button className="button secondary" type="button" onClick={() => onOpenChange(false)}>{t('action.cancel')}</button>{preview ? <button className="button primary" type="button" disabled={busy} onClick={() => void confirm()}>{busy && <LoaderCircle className="spin" size={15} />}{t('workbench:rename.execute')}</button> : <button className="button primary" type="button" disabled={busy || !name.trim()} onClick={() => void loadPreview()}>{busy && <LoaderCircle className="spin" size={15} />}{t('workbench:rename.preview')}</button>}</>}
     >
       <div className="rename-line">
         <span>{mode === 'display' ? skill.displayName : skill.name}</span><ArrowRight size={18} /><input value={name} onChange={(event) => { setName(event.target.value); setPreview(null); }} autoFocus />
       </div>
       {preview && (
         <div className="rename-preview">
-          {preview.targetPath && <Field label="目标目录"><div className="path-box">{preview.targetPath}</div></Field>}
+          {preview.targetPath && <Field label={t('workbench:rename.target')}><div className="path-box">{preview.targetPath}</div></Field>}
           {preview.warnings.map((warning) => <div className="inline-warning" key={warning}>{warning}</div>)}
-          {preview.changes.length === 0 ? <div className="alias-preview">不会修改文件；仅更新工作台本地别名。</div> : preview.changes.map((change) => (
+          {preview.changes.length === 0 ? <div className="alias-preview">{t('workbench:rename.aliasOnly')}</div> : preview.changes.map((change) => (
             <section key={change.relativePath} className="diff-section"><h4>{change.relativePath}</h4><DiffView before={change.before} after={change.after} /></section>
           ))}
         </div>

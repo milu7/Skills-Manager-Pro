@@ -142,6 +142,7 @@ export const aiAnalyses = sqliteTable(
     payloadJson: text('payload_json').notNull(),
     inputFilesJson: text('input_files_json').notNull(),
     inputBytes: integer('input_bytes').notNull(),
+    outputLocale: text('output_locale').notNull().default('zh-CN'),
     createdAt: text('created_at').notNull()
   },
   (table) => [
@@ -179,3 +180,4 @@ export const skillNoteImages = sqliteTable(
 export type RootRow = typeof roots.$inferSelect;
 export type SkillRow = typeof skills.$inferSelect;
 export type ProviderRow = typeof providers.$inferSelect;
+export type SettingRow = typeof settings.$inferSelect;

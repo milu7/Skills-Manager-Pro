@@ -14,18 +14,28 @@ export type DiagnosticSeverity = 'error' | 'warning' | 'info';
 export type SkillHealth = 'error' | 'warning' | 'healthy';
 export type DuplicateKind = 'exact' | 'name' | 'near' | null;
 export type AiProtocol = 'chat_completions' | 'responses';
+export type SupportedLocale = 'zh-CN' | 'en-US';
+export type LocalePreference = 'system' | SupportedLocale;
+
+export interface LocaleState {
+  preference: LocalePreference;
+  resolvedLocale: SupportedLocale;
+  supportedLocales: SupportedLocale[];
+}
 
 export interface SkillDiagnostic {
   code: string;
   severity: DiagnosticSeverity;
   title: string;
   message: string;
+  params?: Record<string, string | number>;
   relativePath?: string;
 }
 
 export interface SkillRoot {
   id: string;
   label: string;
+  labelCode?: string;
   path: string;
   host: HostPlatform;
   scope: SkillScope;
@@ -252,6 +262,10 @@ export interface ActionLog {
   snapshotId: string | null;
   createdAt: string;
   reversible: boolean;
+  descriptor?: {
+    code: string;
+    params?: Record<string, string | number>;
+  };
 }
 
 export interface Snapshot {
@@ -312,6 +326,7 @@ export interface RunAiInput {
   providerId: string;
   attachments: string[];
   expectedHash: string;
+  outputLocale?: SupportedLocale;
 }
 
 export interface AiAnalysisPayload {
@@ -337,12 +352,15 @@ export interface AiAnalysis extends AiAnalysisPayload {
   stale: boolean;
   inputFiles: string[];
   inputBytes: number;
+  outputLocale: SupportedLocale;
   createdAt: string;
 }
 
 export interface ScanProgress {
   running: boolean;
   phase: string;
+  phaseCode?: string;
+  phaseParams?: Record<string, string | number>;
   completedRoots: number;
   totalRoots: number;
   discoveredSkills: number;
@@ -358,6 +376,7 @@ export interface AppBootstrap {
   scanProgress: ScanProgress;
   version: string;
   userDataPath: string;
+  locale: LocaleState;
 }
 
 export interface WorkbenchApi {
@@ -404,6 +423,9 @@ export interface WorkbenchApi {
     save(input: SaveAiProviderInput): Promise<AiProvider>;
     test(id: string): Promise<{ ok: boolean; message: string }>;
     remove(id: string): Promise<void>;
+  };
+  settings: {
+    setLocalePreference(preference: LocalePreference): Promise<LocaleState>;
   };
   history: {
     list(limit?: number): Promise<ActionLog[]>;

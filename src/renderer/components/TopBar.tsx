@@ -2,8 +2,11 @@ import { FolderCog, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useWorkbenchStore } from '../store';
 import { IconButton } from './common';
+import { useTranslation } from 'react-i18next';
+import { localizedScanPhase } from '../i18n';
 
 export function TopBar({ onManageRoots }: { onManageRoots(): void }) {
+  const { t } = useTranslation();
   const filters = useWorkbenchStore((state) => state.filters);
   const setFilters = useWorkbenchStore((state) => state.setFilters);
   const setView = useWorkbenchStore((state) => state.setView);
@@ -41,16 +44,16 @@ export function TopBar({ onManageRoots }: { onManageRoots(): void }) {
   };
 
   const rescan = async () => {
-    notify('info', '后台扫描已开始');
+    notify('info', t('workbench:topbar.rescanStarted'));
     try { await window.workbench.roots.rescan(); } catch (error) { notify('error', String(error)); }
   };
 
   return (
     <header className="topbar">
-          <button className="brand" type="button" onClick={() => setView('skills')} aria-label="Skills Manager Pro 首页">
+      <button className="brand" type="button" onClick={() => setView('skills')} aria-label={t('app.home')}>
         <span className="brand-copy">
-          <span className="brand-title"><strong>Skills Manager Pro</strong>{version && <span className="brand-version"><i />v{version}</span>}</span>
-          <span className="brand-meta"><small>暴论哥3.0（公众号同名）</small></span>
+          <span className="brand-title"><strong>{t('app.title')}</strong>{version && <span className="brand-version"><i />v{version}</span>}</span>
+          <span className="brand-meta"><small>{t('app.author')}</small></span>
         </span>
       </button>
       <div className="global-search" data-disabled={view !== 'skills'}>
@@ -60,18 +63,18 @@ export function TopBar({ onManageRoots }: { onManageRoots(): void }) {
           value={query}
           disabled={view !== 'skills'}
           onChange={(event) => search(event.target.value)}
-          placeholder="搜索名称、说明、正文或路径…"
-          aria-label="搜索 Skills"
+          placeholder={t('workbench:topbar.searchPlaceholder')}
+          aria-label={t('workbench:topbar.searchAria')}
         />
         <kbd>Ctrl K</kbd>
       </div>
       <div className="topbar-status">
         <span className={progress?.running ? 'scan-indicator is-running' : 'scan-indicator'}>
-          <i />{progress?.running ? `${progress.phase} · ${progress.discoveredSkills}` : '索引已就绪'}
+          <i />{progress?.running ? t('workbench:topbar.scanRunning', { phase: localizedScanPhase(t, progress), count: progress.discoveredSkills }) : t('workbench:topbar.indexReady')}
         </span>
-        <IconButton label="管理扫描根目录" onClick={onManageRoots}><FolderCog size={18} /></IconButton>
-        <IconButton label="重新扫描" onClick={() => void rescan()} disabled={progress?.running}><RefreshCw size={18} className={progress?.running ? 'spin' : ''} /></IconButton>
-        <IconButton label="AI 服务设置" className={view === 'providers' ? 'is-active' : ''} onClick={() => setView('providers')}><SlidersHorizontal size={18} /></IconButton>
+        <IconButton label={t('workbench:topbar.manageRoots')} onClick={onManageRoots}><FolderCog size={18} /></IconButton>
+        <IconButton label={t('common:action.rescan')} onClick={() => void rescan()} disabled={progress?.running}><RefreshCw size={18} className={progress?.running ? 'spin' : ''} /></IconButton>
+        <IconButton label={t('workbench:topbar.settings')} className={view === 'settings' ? 'is-active' : ''} onClick={() => setView('settings')}><SlidersHorizontal size={18} /></IconButton>
       </div>
     </header>
   );

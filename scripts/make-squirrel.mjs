@@ -9,12 +9,12 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const packageJson = JSON.parse(await fs.readFile(path.join(projectRoot, 'package.json'), 'utf8'));
 const packagedApp = path.join(projectRoot, 'out', `${packageJson.productName}-win32-x64`);
 const finalOutput = path.join(projectRoot, 'out', 'make', 'squirrel.windows', 'x64');
-const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-squirrel-'));
+const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-manager-pro-squirrel-'));
 const stagingApp = path.join(stagingRoot, 'app');
 const stagingOutput = path.join(stagingRoot, 'output');
 
 try {
-  await fs.access(path.join(packagedApp, 'SkillsManagerPro.exe'));
+  await fs.access(path.join(packagedApp, 'SkillWorkbench.exe'));
   // Squirrel's legacy resource editor cannot reliably load files from paths
   // containing CJK characters. Keep all of its inputs and outputs in an ASCII
   // temporary path, then copy only the finished artifacts back to the project.

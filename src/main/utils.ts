@@ -5,6 +5,25 @@ import path from 'node:path';
 export const nowIso = (): string => new Date().toISOString();
 export const createId = (): string => randomUUID();
 
+export type MessageParams = Record<string, string | number>;
+export type MessageTranslator = (key: string, params?: MessageParams) => string;
+
+export function localizeMessage(
+  translator: MessageTranslator | undefined,
+  key: string,
+  fallback: string,
+  params?: MessageParams
+): string {
+  if (!translator) return fallback;
+  const resourceKey = `messages:main.${key}`;
+  try {
+    const translated = translator(resourceKey, params);
+    return translated && translated !== resourceKey && translated !== `main.${key}` ? translated : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function sha256(content: string | Buffer): string {
   return createHash('sha256').update(content).digest('hex');
 }
@@ -20,13 +39,13 @@ export function isPathInside(parentPath: string, childPath: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-export function assertSafeRelativePath(relativePath: string): void {
+export function assertSafeRelativePath(relativePath: string, translator?: MessageTranslator): void {
   if (!relativePath || relativePath.includes('\0') || path.isAbsolute(relativePath)) {
-    throw new Error('文件路径无效');
+    throw new Error(localizeMessage(translator, 'error.invalidFilePath', '文件路径无效'));
   }
   const normalized = path.normalize(relativePath);
   if (normalized === '..' || normalized.startsWith(`..${path.sep}`)) {
-    throw new Error('文件路径越过了 Skill 目录');
+    throw new Error(localizeMessage(translator, 'error.pathEscapesSkill', '文件路径越过了 Skill 目录'));
   }
 }
 

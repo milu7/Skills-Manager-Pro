@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { HostPlatform, SkillRoot, SkillScope, SkillSourceType } from '../shared/types';
 import type { DatabaseContext } from './db/database';
 import { createId, localizeMessage, normalizeFsPath, nowIso, pathExists, type MessageTranslator } from './utils';
+import { AI_TOOL_LOCATIONS } from '../shared/ai-tool-catalog';
 
 interface RootSeed {
   label: string;
@@ -37,6 +38,22 @@ export class RootsService {
       { label: 'WorkBuddy 插件', path: path.join(home, '.workbuddy', 'plugins'), host: 'workbuddy', scope: 'plugin', sourceType: 'plugin', writable: false, recursive: true, discovered: true },
       { label: '工作台回收站', path: path.join(this.userDataPath, 'trash'), host: 'custom', scope: 'system', sourceType: 'trash', writable: false, recursive: true, discovered: true, always: true }
     ];
+
+    for (const tool of AI_TOOL_LOCATIONS) {
+      const detectPath = path.join(home, ...tool.detectDir.split('/'));
+      const skillsPath = path.join(home, ...tool.skillsDir.split('/'));
+      if (!(await pathExists(detectPath)) && !(await pathExists(skillsPath))) continue;
+      const isTraeBuiltin = tool.key === 'trae_cn_builtin' || tool.key === 'trae_cn_builtin_skills';
+      const isTraePlugin = tool.key === 'trae_cn_plugins';
+      seeds.push({
+        label: `${tool.displayName} Skills`,
+        path: skillsPath,
+        host: tool.key === 'codex' ? 'codex' : tool.key === 'claude_code' ? 'claude' : tool.key === 'workbuddy' ? 'workbuddy' : 'custom',
+        scope: isTraeBuiltin ? 'system' : isTraePlugin ? 'plugin' : 'user',
+        sourceType: isTraeBuiltin ? 'builtin' : isTraePlugin ? 'plugin' : 'user',
+        writable: !isTraeBuiltin && !isTraePlugin, recursive: true, discovered: true
+      });
+    }
 
     for (const seed of seeds) {
       if (process.env.SKILL_WORKBENCH_DISABLE_DEFAULT_ROOTS === '1' && !seed.always) continue;

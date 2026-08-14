@@ -31,7 +31,7 @@ function keepSupportedLocales(buildPath, _electronVersion, platform, _arch, call
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: 'SkillWorkbench',
+    executableName: 'SkillsManagerPro',
     appBundleId: 'local.skill-workbench',
     afterExtract: [keepSupportedLocales]
   },

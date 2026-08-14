@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a focused improvement to Skills Manager Pro.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include API keys, private Skill content, or personal filesystem paths.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Workflow problem
+      description: What recurring task is difficult today, and who encounters it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful outcome rather than only the interface.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Safety boundary
+      options:
+        - label: This proposal should keep Skill files local and retain explicit user confirmation for file-changing operations.
+          required: true

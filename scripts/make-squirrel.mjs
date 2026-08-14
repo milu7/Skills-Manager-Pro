@@ -9,7 +9,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const packageJson = JSON.parse(await fs.readFile(path.join(projectRoot, 'package.json'), 'utf8'));
 const packagedApp = path.join(projectRoot, 'out', `${packageJson.productName}-win32-x64`);
 const finalOutput = path.join(projectRoot, 'out', 'make', 'squirrel.windows', 'x64');
-const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-squirrel-'));
+const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-manager-pro-squirrel-'));
 const stagingApp = path.join(stagingRoot, 'app');
 const stagingOutput = path.join(stagingRoot, 'output');
 
@@ -22,13 +22,13 @@ try {
   await createWindowsInstaller({
     appDirectory: stagingApp,
     outputDirectory: stagingOutput,
-    name: 'skill_workbench',
-    title: packageJson.productName,
+    name: 'skills_manager_pro',
+    title: 'Skills Manager Pro',
     authors: packageJson.author,
     owners: packageJson.author,
-    description: packageJson.productName,
+    description: '本地 Skill 管理、分析与安全编辑工作台',
     version: packageJson.version,
-    exe: 'SkillWorkbench.exe',
+    exe: 'SkillsManagerPro.exe',
     setupExe: 'Skills-Manager-Pro-Setup.exe',
     noMsi: true,
     noDelta: true,

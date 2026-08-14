@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class SkillWorkbenchNativeWindow {
+public static class SkillsManagerProNativeWindow {
   [DllImport("user32.dll")]
   [return: MarshalAs(UnmanagedType.Bool)]
   public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -12,13 +12,13 @@ public static class SkillWorkbenchNativeWindow {
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $packagedDirectory = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'out') -Directory | Where-Object {
-  Test-Path -LiteralPath (Join-Path $_.FullName 'SkillWorkbench.exe')
+  Test-Path -LiteralPath (Join-Path $_.FullName 'SkillsManagerPro.exe')
 } | Select-Object -First 1
 if (-not $packagedDirectory) {
-  throw 'Packaged SkillWorkbench.exe was not found. Run npm.cmd run build first.'
+  throw 'Packaged SkillsManagerPro.exe was not found. Run npm.cmd run build first.'
 }
 
-$executablePath = Join-Path $packagedDirectory.FullName 'SkillWorkbench.exe'
+$executablePath = Join-Path $packagedDirectory.FullName 'SkillsManagerPro.exe'
 $localesPath = Join-Path $packagedDirectory.FullName 'locales'
 $localeNames = @(Get-ChildItem -LiteralPath $localesPath -File | Select-Object -ExpandProperty Name | Sort-Object)
 $expectedLocales = @('en-US.pak', 'zh-CN.pak', 'zh-TW.pak')
@@ -46,7 +46,7 @@ try {
     $process.Refresh()
     if ($process.HasExited) { break }
     $windowHandle = $process.MainWindowHandle
-    if ($windowHandle -ne [IntPtr]::Zero -and [SkillWorkbenchNativeWindow]::IsWindowVisible($windowHandle)) {
+    if ($windowHandle -ne [IntPtr]::Zero -and [SkillsManagerProNativeWindow]::IsWindowVisible($windowHandle)) {
       $windowWasShown = $true
     }
   }

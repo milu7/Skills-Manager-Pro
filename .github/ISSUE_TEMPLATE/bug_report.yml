@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem in Skills Manager Pro.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please remove API keys, custom authorization headers, private Skill content, and personal paths before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: SMP version
+      description: Include the release version and whether you use the installer or portable edition.
+      placeholder: "0.2.1, portable"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 x64"
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Affected Skill source
+      options:
+        - Codex
+        - Claude Code
+        - WorkBuddy
+        - Custom or project folder
+        - Workspace database or history
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and redacted diagnostics
+    validations:
+      required: true

@@ -9,6 +9,7 @@
     "start": "electron-forge start",
     "build": "electron-forge package",
     "make": "electron-forge make --platform=win32 --arch=x64 && node scripts/make-squirrel.mjs",
+    "make:portable": "node scripts/make-portable.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,7 +20,7 @@
     "check": "npm run typecheck && npm run test && npm run build && npm run test:installer-startup && npm run test:e2e"
   },
   "author": "暴论哥3.0（公众号同名）",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "config": {
     "forge": "./forge.config.js"
   },

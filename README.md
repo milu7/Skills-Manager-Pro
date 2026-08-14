@@ -1,73 +1,90 @@
 # Skills Manager Pro
 
-Windows 优先的本地 Electron 应用，用统一索引管理 Codex、Claude、WorkBuddy 与项目目录中的 Skill。Skill 文件仍保留在原位置；数据库只保存索引、分类、标签、历史快照和 AI 分析结果。
+<p align="center">
+  <strong>A local-first, Windows-native manager for AI agent Skills.</strong><br>
+  Discover, inspect, organize, and safely maintain Skills from Codex, Claude Code, WorkBuddy, and custom folders — without moving them into another system.
+</p>
 
-## 软件预览
+<p align="center">
+  <a href="https://github.com/milu7/Skills-Manager-Pro/releases/latest">Download for Windows</a>
+  &nbsp;·&nbsp;
+  <a href="README.zh-CN.md">简体中文</a>
+  &nbsp;·&nbsp;
+  <a href="#contributing">Contributing</a>
+</p>
 
-点击图片可查看完整尺寸。
+<p align="center">
+  <a href="https://github.com/milu7/Skills-Manager-Pro/releases/latest"><img src="https://img.shields.io/github/v/release/milu7/Skills-Manager-Pro?display_name=tag&sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/milu7/Skills-Manager-Pro" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4" alt="Windows 10 or 11 x64">
+  <img src="https://img.shields.io/badge/built%20with-TypeScript-3178C6" alt="Built with TypeScript">
+</p>
+
+Skills are easy to accumulate and surprisingly hard to maintain. They live across personal folders, projects, plugins, caches, and marketplaces — with different ownership, safety constraints, and formats. Skills Manager Pro (SMP) gives those files one local workspace while keeping each Skill in its original location.
+
+## What makes SMP useful
+
+| See what you have | Change only what is safe | Keep a way back |
+| --- | --- | --- |
+| Discover multiple hosts and custom roots, then search by name, description, content, path, source, health, or writeability. | Inspect YAML, Markdown, references, scripts, binaries, duplicate signals, and source permissions before editing. | Review diffs before save, preserve snapshots and operation history, and restore managed Skills from the workspace recycle bin. |
+
+- **One local index, many sources.** Codex, Claude Code, WorkBuddy, project folders, plugins, built-ins, marketplaces, caches, backups, and custom roots remain distinguishable.
+- **A real maintenance workspace.** Edit supported Markdown, structured metadata, and text resources; separate display-name changes from internal renames; inspect likely self-references before a rename.
+- **Local-first safety boundaries.** Protected sources are read-only by default. Saves use an atomic replacement and refuse to overwrite an externally changed file.
+- **Useful diagnosis without executing Skills.** SMP checks structure, YAML, references, file sizes, scripts/binaries, links, duplicate candidates, and path risks. It inventories scripts; it does not run them.
+- **Optional AI analysis under your control.** AI work is manual, previews the content to be sent, defaults to `SKILL.md`, excludes scripts and binaries, and never auto-rewrites a Skill.
+
+## Product tour
+
+The screenshots show core workflows. Minor labels may differ between releases.
 
 <p align="center">
   <a href="docs/images/software-preview/overview.png">
-    <img src="docs/images/software-preview/overview.png" alt="Skills Manager Pro 统一索引与详情概览" width="100%">
-  </a>
-  <br>
-  <sub>统一索引、来源识别、状态筛选与 Skill 详情概览</sub>
+    <img src="docs/images/software-preview/overview.png" alt="Skills Manager Pro overview with a unified Skill index, source filters, and detail pane" width="100%">
+  </a><br>
+  <sub>One index for Skills across hosts, with source, health, and writeability context.</sub>
 </p>
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>可编辑 Skill 与内容预览</strong><br>
-      <a href="docs/images/software-preview/editable-skill.png">
-        <img src="docs/images/software-preview/editable-skill.png" alt="可编辑 Skill 与内容预览">
-      </a>
-    </td>
-    <td width="50%" valign="top">
-      <strong>本地安全诊断</strong><br>
-      <a href="docs/images/software-preview/diagnostics.png">
-        <img src="docs/images/software-preview/diagnostics.png" alt="Skill 本地安全诊断与错误提示">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>重复项识别</strong><br>
-      <a href="docs/images/software-preview/duplicates.png">
-        <img src="docs/images/software-preview/duplicates.png" alt="Skill 精确重复项识别">
-      </a>
-    </td>
-    <td width="50%" valign="top">
-      <strong>结构化元数据编辑</strong><br>
-      <a href="docs/images/software-preview/structured-editor.png">
-        <img src="docs/images/software-preview/structured-editor.png" alt="Skill 结构化元数据编辑器">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <strong>图片备注与实时预览</strong><br>
-      <a href="docs/images/software-preview/image-notes.png">
-        <img src="docs/images/software-preview/image-notes.png" alt="Skill 图片备注与 Markdown 实时预览">
-      </a>
-    </td>
-  </tr>
-</table>
+| Editable Skill and content preview | Local safety diagnostics |
+| --- | --- |
+| <a href="docs/images/software-preview/editable-skill.png"><img src="docs/images/software-preview/editable-skill.png" alt="Editable Skill with Markdown content preview"></a> | <a href="docs/images/software-preview/diagnostics.png"><img src="docs/images/software-preview/diagnostics.png" alt="Local Skill diagnostics and actionable warnings"></a> |
+| **Exact and near-duplicate signals** | **Structured metadata editing** |
+| <a href="docs/images/software-preview/duplicates.png"><img src="docs/images/software-preview/duplicates.png" alt="Duplicate Skill detection"></a> | <a href="docs/images/software-preview/structured-editor.png"><img src="docs/images/software-preview/structured-editor.png" alt="Structured Skill metadata editor"></a> |
 
-## 已实现能力
+<p align="center">
+  <a href="docs/images/software-preview/image-notes.png">
+    <img src="docs/images/software-preview/image-notes.png" alt="Markdown notes with image attachments and live preview" width="100%">
+  </a><br>
+  <sub>Keep personal usage notes separate from the original Skill files.</sub>
+</p>
 
-- 自动发现用户级目录，并可添加项目根目录；区分用户、项目、插件、内置、市场、缓存、备份和回收站来源。
-- 名称、说明、正文和路径搜索，以及平台、分类、来源、健康状态、可写性和重复项筛选。
-- YAML、引用、文件体积、脚本/二进制、名称冲突、精确与近似重复等本地诊断；扫描过程不会执行 Skill 脚本。
-- 安全 Markdown 预览、结构化元数据与正文编辑、文本资源高级编辑、并发冲突拦截和修改前差异确认。
-- 显示名与内部名称分开修改；内部改名预检目录、宿主元数据和自引用。
-- 工作台回收站、恢复、操作历史和文本快照；没有永久删除入口。
-- 支持跟随系统、简体中文和英文界面；语言可在“软件设置 → 常规”即时切换并在重启后保持。
-- Chat Completions 与 Responses 两种 AI 协议、发送内容预览、附件上限、结构化校验、结果缓存、任务取消，以及最多 20 个当前筛选结果的再次确认式批量分析。
-- Electron 安全隔离、Zod IPC 参数校验、`safeStorage` 密钥加密和 Windows x64 打包。
+## Download and run
 
-## 开发与验证
+SMP currently supports **Windows 10/11 x64** and is designed for a single local user.
 
-要求 Node.js 24+，在 Windows PowerShell 中使用：
+1. Open the [latest release](https://github.com/milu7/Skills-Manager-Pro/releases/latest).
+2. Choose **`Skills-Manager-Pro-Setup.exe`** to install, or **`Skills-Manager-Pro-Portable-0.2.1.zip`** for a portable copy.
+3. Extract the portable ZIP before running `启动便携版.cmd`. Its data stays beside the app in the `data` folder.
+
+The app is not code-signed yet, so Windows may show a publisher or SmartScreen warning. Download only from this repository’s Releases page and verify the accompanying `SHA256SUMS.txt` when needed.
+
+## Local-first data and safety
+
+- Your Skill files remain at their original paths. SMP stores a local index, categories, tags, snapshots, history, and optional AI results in `%APPDATA%\Skill 管理工作台`.
+- User and project sources can be editable; plugin, built-in, marketplace, cache, and backup sources are protected by default.
+- A save presents a diff, creates a snapshot, and uses a same-directory temporary file with atomic replacement. A changed-on-disk hash blocks accidental overwrite.
+- Managed removal goes to the workspace recycle bin; there is no permanent-delete entry point in the app.
+- API keys and custom sensitive headers are encrypted with Electron `safeStorage`; plaintext keys are not returned to the UI or IPC layer.
+
+Read more about [architecture and safety boundaries](docs/架构与安全边界.md) and [backup and recovery](docs/数据备份与恢复.md).
+
+## Scope and non-goals
+
+SMP does not currently provide accounts, cloud sync, team permissions, a Skill marketplace installer, forced plugin uninstall, Git auto-update, script execution, automatic AI rewriting, code signing, or verified macOS/Linux releases. It is a local management tool, not an unattended automation service.
+
+## Development
+
+Requires Node.js 24+ on Windows PowerShell.
 
 ```powershell
 npm.cmd install
@@ -76,29 +93,20 @@ npm.cmd run typecheck
 npm.cmd test
 npm.cmd run build
 npm.cmd run test:e2e
-npm.cmd run benchmark:scan
 npm.cmd run make
+npm.cmd run make:portable
+npm.cmd run test:installer-startup
 npm.cmd run smoke:packaged
 ```
 
-`npm.cmd run make` 会生成可直接解压运行的 ZIP，以及 Squirrel 安装器。因为旧版资源编辑器对中文工程路径兼容性不稳定，安装器阶段会自动复制到纯英文临时目录构建，再将最终产物复制回 `out/make`。
+`npm.cmd run make` creates the Windows package and Squirrel installer. `npm.cmd run make:portable` creates a ZIP with a data directory beside the executable. The installer build stages through an ASCII-only temporary directory because legacy Windows resource tooling can be unreliable with Chinese project paths.
 
-`npm.cmd run benchmark:scan` 会用隔离的临时数据库只读扫描当前 Windows 用户的默认 Skill 目录，输出实际数量与耗时，并在结束后删除临时索引；运行前需要先执行 `npm.cmd run build`。
+## Contributing
 
-`npm.cmd run smoke:packaged` 会隐藏启动 `out` 中的打包版，在隔离数据目录中检查主进程、沙箱渲染进程、SQLite 和随包原生模块，随后自动退出并清理测试数据。界面 API 与 Node 隔离由 `test:e2e` 覆盖。
+Bug reports, focused feature proposals, and documentation improvements are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), search existing issues, and keep diagnostics free of API keys, personal paths, or private Skill content.
 
-## 数据与安全边界
+## License
 
-- 为保证升级后继续读取原有索引，打包版沿用历史数据目录 `%APPDATA%\Skill 管理工作台`；对外软件名称为 `Skills Manager Pro`。
-- 索引数据库为 `skill-workbench.sqlite3`，工作台回收站为同目录下的 `trash`。
-- API Key 与自定义敏感请求头经 Electron `safeStorage` 加密后才写入数据库；界面和 IPC 不回传明文密钥。
-- 用户和项目来源默认可写；插件、内置、市场、缓存和备份默认只读。
-- 编辑保存使用同目录临时文件与原子替换；磁盘哈希与加载时不一致时会阻止覆盖。
-- AI 分析必须手动触发，默认只发送 `SKILL.md`；脚本和二进制不会发送，也不会自动执行或改写 Skill。
-- 界面语言不会翻译或改写 Skill 内容、路径、备注和自定义标签；AI 新分析结果会按当前界面语言生成，并与其他语言的缓存隔离。
+Released under the [MIT License](LICENSE).
 
-完整设计见 [架构与安全边界](docs/架构与安全边界.md)，备份步骤见 [数据备份与恢复](docs/数据备份与恢复.md)，多语言测试分支证据与产物哈希见 [v0.2.0 多语言验收记录](docs/v0.2.0-i18n-验收记录.md)。
-
-## v1 边界
-
-当前面向 Windows 10/11 x64、单机单用户。未实现账号与云同步、团队权限、市场安装、插件强制卸载、Git 自动升级、Skill 脚本执行、AI 自动改写或代码签名。macOS/Linux 仅保留平台适配扩展点，未进行发布验证。
+Product and company names such as Codex, Claude Code, and WorkBuddy belong to their respective owners. Skills Manager Pro is an independent tool and is not affiliated with or endorsed by those products’ owners.

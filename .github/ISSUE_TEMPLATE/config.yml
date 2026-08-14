@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and safety boundaries
+    url: https://github.com/milu7/Skills-Manager-Pro/blob/main/docs/%E6%9E%B6%E6%9E%84%E4%B8%8E%E5%AE%89%E5%85%A8%E8%BE%B9%E7%95%8C.md
+    about: Read how SMP indexes and protects local Skill files before reporting a behavior question.

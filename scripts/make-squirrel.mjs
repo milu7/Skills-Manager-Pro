@@ -14,7 +14,7 @@ const stagingApp = path.join(stagingRoot, 'app');
 const stagingOutput = path.join(stagingRoot, 'output');
 
 try {
-  await fs.access(path.join(packagedApp, 'SkillWorkbench.exe'));
+  await fs.access(path.join(packagedApp, 'SkillsManagerPro.exe'));
   // Squirrel's legacy resource editor cannot reliably load files from paths
   // containing CJK characters. Keep all of its inputs and outputs in an ASCII
   // temporary path, then copy only the finished artifacts back to the project.

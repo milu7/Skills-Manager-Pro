@@ -45,8 +45,9 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await expect(page.getByRole('dialog', { name: '欢迎来到 Skills Manager Pro' })).toBeVisible();
     await page.getByRole('button', { name: '开始浏览' }).click();
     await expect(page.getByText('Skills Manager Pro', { exact: true })).toBeVisible();
-    await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toBeVisible();
-    await expect(page.locator('.brand-version')).toHaveText('v0.2.1');
+    await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'GitHub', exact: true })).toBeVisible();
+    await expect(page.locator('.brand-version')).toHaveText('v0.2.2');
     await expect(page.locator('.brand-version i')).toHaveCSS('background-color', 'rgb(32, 164, 122)');
     await expect(page.getByText('来源宿主，不是内容分类', { exact: true })).toBeVisible();
     const productIcons = page.locator('.side-host .host-mark img');
@@ -100,66 +101,16 @@ test('built Electron app starts with sandboxed renderer and indexes three host f
     await globalSearch.fill('');
     await expect.poll(async () => page.locator('.skill-row').count()).toBe(5);
 
-    await page.getByRole('button', { name: '暴论哥3.0', exact: true }).click();
-    const authorDialog = page.getByRole('dialog', { name: '暴论哥3.0', exact: true });
-    await expect(authorDialog).toBeVisible();
-    await expect(authorDialog.locator('.author-intro h3')).toHaveText('暴论哥3.0');
-    await expect(authorDialog.getByRole('img', { name: '暴论哥3.0头像' })).toBeVisible();
-    await expect(authorDialog.getByRole('img', { name: '添加作者微信二维码' })).toBeVisible();
-    await expect(authorDialog.getByRole('img', { name: '暴论哥3.0公众号二维码' })).toBeVisible();
-    await expect(authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' })).toBeVisible();
-    await expect(authorDialog.getByText('二维码待补充')).toHaveCount(0);
-    await expect(authorDialog.locator('.author-reward-card')).toHaveCount(1);
-    const authorImageSizes = await authorDialog.locator('img').evaluateAll((images) => images.map((image) => {
-      const element = image as HTMLImageElement;
-      return {
-        complete: element.complete,
-        naturalWidth: element.naturalWidth,
-        naturalHeight: element.naturalHeight
-      };
-    }));
-    expect(authorImageSizes).toEqual([
-      { complete: true, naturalWidth: 1254, naturalHeight: 1254 },
-      { complete: true, naturalWidth: 400, naturalHeight: 400 },
-      { complete: true, naturalWidth: 1710, naturalHeight: 624 },
-      { complete: true, naturalWidth: 1152, naturalHeight: 1152 }
-    ]);
-    const displayedCodeSizes = await authorDialog.locator('.author-code-media').evaluateAll((elements) => elements.map((element) => {
-      const box = element.getBoundingClientRect();
-      return { width: Math.round(box.width), height: Math.round(box.height) };
-    }));
-    expect(displayedCodeSizes).toHaveLength(3);
-    expect(displayedCodeSizes[0]!.width).toBeLessThanOrEqual(138);
-    expect(displayedCodeSizes[0]!.height).toBeLessThanOrEqual(138);
-    expect(displayedCodeSizes[1]!.width).toBeLessThanOrEqual(352);
-    expect(displayedCodeSizes[1]!.height).toBeLessThanOrEqual(130);
-    expect(displayedCodeSizes[2]!.width).toBeLessThanOrEqual(240);
-    expect(displayedCodeSizes[2]!.height).toBeLessThanOrEqual(240);
-    const copyAlignment = await authorDialog.evaluate((dialog) => {
-      const contactCode = dialog.querySelector<HTMLElement>('.is-contact-card .author-code-media')!;
-      const contactDetail = dialog.querySelector<HTMLElement>('.is-contact-card .author-code-copy span')!;
-      const rewardCode = dialog.querySelector<HTMLElement>('.author-code-media.is-reward')!;
-      const rewardDetail = dialog.querySelector<HTMLElement>('.author-reward-copy p')!;
-      return {
-        contactBottomDelta: Math.abs(contactCode.getBoundingClientRect().bottom - contactDetail.getBoundingClientRect().bottom),
-        rewardBottomDelta: Math.abs(rewardCode.getBoundingClientRect().bottom - rewardDetail.getBoundingClientRect().bottom)
+    await page.evaluate(() => {
+      (window as unknown as { __openedUrls: string[] }).__openedUrls = [];
+      window.open = (url?: string | URL) => {
+        (window as unknown as { __openedUrls: string[] }).__openedUrls.push(String(url));
+        return null;
       };
     });
-    expect(copyAlignment.contactBottomDelta).toBeLessThanOrEqual(8);
-    expect(copyAlignment.rewardBottomDelta).toBeLessThanOrEqual(8);
-    await page.screenshot({ path: 'test-results/skill-workbench-author.png', fullPage: true });
-    await page.setViewportSize({ width: 1120, height: 720 });
-    const compactAuthorBox = await authorDialog.boundingBox();
-    expect(compactAuthorBox).not.toBeNull();
-    expect(compactAuthorBox!.x).toBeGreaterThanOrEqual(0);
-    expect(compactAuthorBox!.y).toBeGreaterThanOrEqual(0);
-    expect(compactAuthorBox!.x + compactAuthorBox!.width).toBeLessThanOrEqual(1120);
-    expect(compactAuthorBox!.y + compactAuthorBox!.height).toBeLessThanOrEqual(720);
-    await authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' }).scrollIntoViewIfNeeded();
-    await expect(authorDialog.getByRole('img', { name: 'Harry 的微信赞赏码' })).toBeVisible();
-    await page.screenshot({ path: 'test-results/skill-workbench-author-compact.png', fullPage: true });
-    await page.setViewportSize({ width: 1500, height: 940 });
-    await authorDialog.getByRole('button', { name: '知道了' }).click();
+    await page.getByRole('button', { name: 'GitHub', exact: true }).click();
+    await expect.poll(async () => page.evaluate(() => (window as unknown as { __openedUrls: string[] }).__openedUrls))
+      .toEqual(['https://github.com/milu7/Skills-Manager-Pro']);
 
     await page.setViewportSize({ width: 1500, height: 520 });
     const sidebarScroller = page.locator('.sidebar-scroll');
@@ -322,7 +273,8 @@ test('switches to English immediately, preserves user content, and restores the 
     await page.getByRole('button', { name: 'Close notification' }).click();
 
     await page.getByRole('button', { name: 'Skills Manager Pro home' }).click();
-    await expect(page.getByRole('button', { name: 'Baolunge 3.0', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'GitHub', exact: true })).toBeVisible();
+    await expect(page.getByText('暴论哥3.0（公众号同名）', { exact: true })).toHaveCount(0);
     await expect(page.locator('.skill-row').filter({ hasText: '视觉审计助手' })).toBeVisible();
     await expect(page.locator('.skill-row').filter({ hasText: '为本地产品界面提供视觉审计、排版和色彩建议。' })).toBeVisible();
     const sidebarLayout = await page.locator('.sidebar').evaluate((element) => ({
@@ -364,6 +316,46 @@ test('switches to English immediately, preserves user content, and restores the 
     await expect(page.getByRole('button', { name: /All Skills/ })).toBeVisible();
     await expect.poll(async () => application!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle()))
       .toBe('Skills Manager Pro');
+  } finally {
+    await application?.close();
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
+
+test('shows a newly discovered TRAE platform with its catalogue name and brand icon', async () => {
+  const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-trae-e2e-'));
+  const home = path.join(testRoot, 'home');
+  const userData = path.join(testRoot, 'user-data');
+  const traeSkill = path.join(home, '.trae', 'skills', 'trae-helper');
+  await fs.mkdir(traeSkill, { recursive: true });
+  await fs.writeFile(path.join(traeSkill, 'SKILL.md'), '---\nname: trae-helper\ndescription: TRAE helper skill.\n---\n\nBody.\n');
+  await seedLocalePreference(userData, 'zh-CN');
+  let application: ElectronApplication | null = null;
+  try {
+    // Redirect Node's os.homedir() so initializeDefaults discovers ~/.trae/skills
+    // as a new platform root; storage stays isolated via SKILL_WORKBENCH_USER_DATA.
+    application = await electron.launch({
+      args: [path.resolve('.webpack', 'x64', 'main')],
+      env: { ...process.env, USERPROFILE: home, SKILL_WORKBENCH_USER_DATA: userData }
+    });
+    const page = await application.firstWindow();
+    await page.setViewportSize({ width: 1500, height: 940 });
+    const guide = page.getByRole('dialog', { name: '欢迎来到 Skills Manager Pro' });
+    if (await guide.isVisible().catch(() => false)) {
+      await guide.getByRole('button', { name: '开始浏览' }).click();
+    }
+    await expect.poll(async () => page.locator('.side-host').count(), { timeout: 15_000 }).toBe(5);
+    const traeHost = page.locator('.side-host', { hasText: 'TRAE IDE' });
+    await expect(traeHost).toBeVisible();
+    const traeMark = traeHost.locator('.host-mark');
+    await expect(traeMark).toHaveClass(/has-icon/);
+    await expect(traeMark.locator('img')).toBeVisible();
+    await expect(traeMark.locator('img')).toHaveAttribute('src', /\.svg$/);
+    await expect(traeMark.locator('img')).toHaveJSProperty('complete', true);
+    expect(await traeMark.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(traeHost.locator('b')).toHaveText('1');
+    await expect(page.getByText('host.trae', { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/skill-workbench-trae.png', fullPage: true });
   } finally {
     await application?.close();
     await fs.rm(testRoot, { recursive: true, force: true });

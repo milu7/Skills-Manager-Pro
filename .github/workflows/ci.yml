@@ -1,0 +1,38 @@
+# #11: continuous integration for the Windows-only build chain.
+# Runs the full verification chain on every push/PR: typecheck → vitest →
+# electron-forge package → installer startup regression → Playwright e2e.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Windows full check chain
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Electron and better-sqlite3 ship prebuilt binaries; cache them so
+      # repeated runs do not re-download (~100 MB) on every commit.
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LOCALAPPDATA }}/electron/Cache
+          key: electron-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Full check chain (typecheck, vitest, package, installer startup, e2e)
+        run: npm run check

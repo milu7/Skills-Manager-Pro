@@ -24,9 +24,7 @@ const mainMessageKeys = [
   'error.validation.nameForbiddenCharacters', 'error.validation.httpOnly',
   'success.providerConnected', 'success.organizationSaved', 'success.displayRenamed', 'success.internalRenamed',
   'success.movedTrash', 'success.restored', 'success.saved',
-  'warning.aliasOnly', 'warning.claudeRename', 'warning.oldNameText',
-  'aiReason.fileTooLarge', 'aiReason.metadataOptional', 'aiReason.textOptional', 'aiReason.scriptNever',
-  'aiReason.binaryNever', 'aiReason.overLimit'
+  'warning.aliasOnly', 'warning.claudeRename', 'warning.oldNameText'
 ] as const;
 
 describe('localized main-domain data', () => {

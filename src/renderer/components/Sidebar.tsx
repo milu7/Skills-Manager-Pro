@@ -1,21 +1,15 @@
-import { AlertCircle, ArchiveRestore, Bot, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Orbit, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertCircle, ArchiveRestore, Bot, Boxes, ChevronDown, CircleOff, Clock3, Copy, FolderCog, LockKeyhole, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
 import clsx from 'clsx';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HostPlatform, SkillHealth } from '../../shared/types';
 import { useWorkbenchStore } from '../store';
-import { AuthorModal } from './AuthorModal';
 import { useTranslation } from 'react-i18next';
-import { translatedCategory, translatedHost } from '../i18n';
-import codexIcon from '../assets/platform-codex.svg';
-import claudeIcon from '../assets/platform-claude.svg';
-import workbuddyIcon from '../assets/platform-workbuddy.png';
+import { isToolHost, toolColorClass, toolIcon, toolMarkText, translatedCategory, translatedHost } from '../i18n';
+import { AI_TOOL_LOCATIONS } from '../../shared/ai-tool-catalog';
+import { APP_GITHUB_URL } from '../../shared/constants';
 
-const hosts: Array<{ id: HostPlatform; icon?: string }> = [
-  { id: 'codex', icon: codexIcon },
-  { id: 'claude', icon: claudeIcon },
-  { id: 'workbuddy', icon: workbuddyIcon },
-  { id: 'custom' }
-];
+const ALWAYS_VISIBLE_HOSTS: HostPlatform[] = ['codex', 'claude', 'workbuddy', 'custom'];
+const toolOrder = new Map(AI_TOOL_LOCATIONS.map((tool, index) => [tool.key, index]));
 
 export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
   const { t } = useTranslation();
@@ -28,7 +22,17 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
   const stats = list?.stats;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasMoreBelow, setHasMoreBelow] = useState(false);
-  const [authorOpen, setAuthorOpen] = useState(false);
+
+  const hostEntries = useMemo<HostPlatform[]>(() => {
+    const byHost = stats?.byHost ?? {};
+    const present = Object.keys(byHost).filter((host) => (byHost[host] ?? 0) > 0);
+    const discovered = present
+      .filter((host) => !ALWAYS_VISIBLE_HOSTS.includes(host as HostPlatform))
+      .sort((left, right) =>
+        (toolOrder.get(left) ?? Number.MAX_SAFE_INTEGER) - (toolOrder.get(right) ?? Number.MAX_SAFE_INTEGER)
+        || left.localeCompare(right));
+    return [...ALWAYS_VISIBLE_HOSTS, ...discovered];
+  }, [stats]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -91,11 +95,23 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
             <section className="side-section">
               <h2>{t('workbench:sidebar.platforms')}</h2>
               <p className="side-section-note">{t('workbench:sidebar.platformsHelp')}</p>
-              {hosts.map((host) => (
-                <button key={host.id} type="button" title={host.id === 'custom' ? t('workbench:sidebar.customHelp') : t('workbench:sidebar.hostHelp', { host: translatedHost(t, host.id) })} className={clsx('side-host', filters.hosts?.includes(host.id) && view === 'skills' && 'is-active')} onClick={() => showSkills({ hosts: [host.id], state: 'active' })}>
-                  <span className={`host-mark host-${host.id}`} aria-hidden="true">{host.icon ? <img src={host.icon} alt="" /> : <Bot size={15} />}</span><span>{translatedHost(t, host.id)}</span><b>{stats?.byHost[host.id] ?? 0}</b>
-                </button>
-              ))}
+              {hostEntries.map((id) => {
+                const icon = toolIcon(id);
+                const isTool = isToolHost(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    title={id === 'custom' ? t('workbench:sidebar.customHelp') : t('workbench:sidebar.hostHelp', { host: translatedHost(t, id) })}
+                    className={clsx('side-host', filters.hosts?.includes(id) && view === 'skills' && 'is-active')}
+                    onClick={() => showSkills({ hosts: [id], state: 'active' })}
+                  >
+                    <span className={clsx('host-mark', `host-${id}`, icon && 'has-icon', !icon && isTool && 'is-tool', !icon && isTool && toolColorClass(id))} aria-hidden="true">
+                      {icon ? <img src={icon} alt="" /> : isTool ? <span>{toolMarkText(id)}</span> : <Bot size={15} />}
+                    </span><span>{translatedHost(t, id)}</span><b>{stats?.byHost[id] ?? 0}</b>
+                  </button>
+                );
+              })}
             </section>
 
             {stats && stats.categories.length > 0 && (
@@ -126,14 +142,33 @@ export function Sidebar({ onManageRoots }: { onManageRoots(): void }) {
         <button type="button" onClick={() => setView('history')} className={view === 'history' ? 'is-active' : ''}><Clock3 size={16} /><span>{t('workbench:sidebar.history')}</span></button>
         <button type="button" onClick={openSettings} className={view === 'settings' ? 'is-active' : ''}><Sparkles size={16} /><span>{t('workbench:sidebar.settings')}</span></button>
         <button type="button" onClick={onManageRoots}><FolderCog size={16} /><span>{t('workbench:sidebar.roots')}</span></button>
-        <button type="button" onClick={() => setAuthorOpen(true)}><Orbit size={16} /><span>{t('app.authorName')}</span></button>
+        <button type="button" onClick={() => window.open(APP_GITHUB_URL, '_blank', 'noopener')}><GithubIcon size={16} /><span>{t('app.github')}</span></button>
         <div className="privacy-note"><LockKeyhole size={13} /><span>{t('workbench:sidebar.privacy')}</span></div>
       </footer>
-      <AuthorModal open={authorOpen} onOpenChange={setAuthorOpen} />
     </aside>
   );
 }
 
 function SideItem({ active, icon, label, count, tone, title, onClick }: { active?: boolean; icon: React.ReactNode; label: string; count?: number; tone?: string; title?: string; onClick(): void }) {
   return <button type="button" title={title} className={clsx('side-item', active && 'is-active', tone && `tone-${tone}`)} onClick={onClick}>{icon}<span>{label}</span><b>{count ?? 0}</b></button>;
+}
+
+// GitHub brand mark, drawn to match the stroke style of the Lucide icons used
+// elsewhere in the sidebar (lucide v1 no longer ships brand icons).
+function GithubIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+    </svg>
+  );
 }

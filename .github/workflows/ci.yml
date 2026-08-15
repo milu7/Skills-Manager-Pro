@@ -31,8 +31,17 @@ jobs:
           path: ${{ env.LOCALAPPDATA }}/electron/Cache
           key: electron-${{ hashFiles('package-lock.json') }}
 
+      # better-sqlite3 ships a Node-API prebuild per platform, so a compile is
+      # never needed. npm still tries to build it during `npm ci` because the
+      # tarball contains a binding.gyp, and that requires a Visual Studio C++
+      # toolchain. The GitHub runner's VS 18 is not recognized by the pinned
+      # @electron/node-gyp ("unsupported version: 18"), so the build fails.
+      # --ignore-scripts skips that pointless compile; the prebuilds are files
+      # in the tarball and survive the flag. forge downloads Electron itself
+      # via @electron/get, and the installer-startup/e2e checks use the
+      # packaged app, so no project lifecycle script is actually needed here.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Full check chain (typecheck, vitest, package, installer startup, e2e)
         run: npm run check

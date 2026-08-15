@@ -88,11 +88,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
 
   async refreshList(preferSelection) {
     const result = await window.workbench.skills.list(get().filters);
-    const current = preferSelection === undefined ? get().selectedId : preferSelection;
-    const selectedId = current && result.items.some((item) => item.id === current) ? current : result.items[0]?.id ?? null;
-    set({ list: result, selectedId, details: selectedId === get().selectedId ? get().details : null });
-    if (selectedId && (!get().details || get().details?.id !== selectedId)) await get().select(selectedId);
-    if (!selectedId) set({ details: null });
+    const requested = preferSelection === undefined ? get().selectedId : preferSelection;
+    // #16: when the selection is filtered out, keep it instead of jumping to
+    // the first row — filtering must not yank the user's view away. Details
+    // stay cached; a stale selection surfaces its own error if it ever breaks.
+    const current = requested && result.items.some((item) => item.id === requested) ? requested : get().selectedId ?? null;
+    set({ list: result, selectedId: current, details: current === get().selectedId ? get().details : null });
+    if (current && (!get().details || get().details?.id !== current)) await get().select(current);
+    if (!current) set({ details: null });
   },
 
   async refreshDetails() {

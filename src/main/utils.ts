@@ -32,9 +32,23 @@ export function normalizeFsPath(value: string): string {
   return path.resolve(value).replace(/[\\/]+$/, '').toLocaleLowerCase('en-US');
 }
 
+/**
+ * Canonical logical name shared by family detection, duplicate name grouping
+ * and the name-vs-folder diagnostic: trimmed, lowercased (en-US) and with runs
+ * of whitespace, underscores and hyphens collapsed into a single hyphen.
+ */
+export function normalizeLogicalName(value: string): string {
+  return value.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/g, '-');
+}
+
 export function isPathInside(parentPath: string, childPath: string): boolean {
   const parent = path.resolve(parentPath);
   const child = path.resolve(childPath);
+  // #18: Windows paths compare case-insensitively. Node's win32 path.relative
+  // already does, but an explicit identity check keeps this contract explicit
+  // and independent of that implementation detail (watcher events may arrive
+  // with different casing than the configured root path).
+  if (process.platform === 'win32' && parent.toLocaleLowerCase('en-US') === child.toLocaleLowerCase('en-US')) return true;
   const relative = path.relative(parent, child);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }

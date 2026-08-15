@@ -4,7 +4,8 @@ import type { AiInputPreview, SkillInstallation } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
 import { Modal, formatBytes } from './common';
 import { useTranslation } from 'react-i18next';
-import { activeLocale } from '../i18n';
+import clsx from 'clsx';
+import { activeLocale, isToolHost, toolColorClass, toolIcon } from '../i18n';
 
 interface BatchItem {
   skill: SkillInstallation;
@@ -112,13 +113,20 @@ export function BatchAiDialog({
       </div>
       <div className="batch-ai-list">
         {loading && <div className="batch-loading"><LoaderCircle className="spin" size={18} />{t('workbench:batch.loading')}</div>}
-        {!loading && items.map((item) => (
-          <div className="batch-ai-row" key={item.skill.id}>
-            <span className={`host-mark host-${item.skill.host}`}>{item.skill.host.slice(0, 2).toUpperCase()}</span>
-            <div><strong>{item.skill.displayName}</strong><code>{item.skill.path}</code></div>
-            {item.error ? <em className="batch-error"><TriangleAlert size={13} />{item.error}</em> : <span>{formatBytes(item.preview?.mainFileBytes ?? 0)} · SKILL.md</span>}
-          </div>
-        ))}
+        {!loading && items.map((item) => {
+          const host = item.skill.host;
+          const icon = toolIcon(host);
+          const tool = isToolHost(host);
+          return (
+            <div className="batch-ai-row" key={item.skill.id}>
+              <span className={clsx('host-mark', `host-${host}`, icon && 'has-icon', !icon && tool && 'is-tool', !icon && tool && toolColorClass(host))}>
+                {icon ? <img src={icon} alt="" /> : host.slice(0, 2).toUpperCase()}
+              </span>
+              <div><strong>{item.skill.displayName}</strong><code>{item.skill.path}</code></div>
+              {item.error ? <em className="batch-error"><TriangleAlert size={13} />{item.error}</em> : <span>{formatBytes(item.preview?.mainFileBytes ?? 0)} · SKILL.md</span>}
+            </div>
+          );
+        })}
       </div>
     </Modal>
   );

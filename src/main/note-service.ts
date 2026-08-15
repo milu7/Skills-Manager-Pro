@@ -5,6 +5,10 @@ import type { DatabaseContext } from './db/database';
 import { createId, localizeMessage, nowIso, type MessageTranslator } from './utils';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Total note-image budget per Skill (optimization plan #9). */
+const IMAGE_QUOTA_PER_SKILL = 20 * 1024 * 1024;
+/** UUID-shaped ids only; the protocol never resolves anything else. */
+const IMAGE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface NoteRow {
   body: string;
@@ -56,6 +60,10 @@ export class NoteService {
     if (content.length > MAX_IMAGE_BYTES) throw new Error(localizeMessage(this.translate, 'error.noteImageTooLarge', '单张备注图片不能超过 8 MB'));
     const mimeType = detectRasterImage(content);
     if (!mimeType) throw new Error(localizeMessage(this.translate, 'error.noteImageType', '仅支持 PNG、JPEG、GIF 或 WebP 图片'));
+    const total = this.database.sqlite.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM skill_note_images WHERE skill_id = ?').get(skillId) as { total: number };
+    if ((total.total ?? 0) + content.length > IMAGE_QUOTA_PER_SKILL) {
+      throw new Error(localizeMessage(this.translate, 'error.noteImageQuota', '单 Skill 备注图片总量不能超过 20 MB'));
+    }
     const id = createId();
     const createdAt = nowIso();
     const filename = path.basename(filePath).slice(0, 240);
@@ -63,7 +71,28 @@ export class NoteService {
       INSERT INTO skill_note_images (id, skill_id, filename, mime_type, content, size_bytes, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, skillId, filename, mimeType, content, content.length, createdAt);
-    return { id, skillId, filename, mimeType, sizeBytes: content.length, dataUrl: toDataUrl(mimeType, content), createdAt };
+    return { id, skillId, filename, mimeType, sizeBytes: content.length, url: toImageUrl(id), createdAt };
+  }
+
+  /**
+   * Serves one note image over the custom `skill-note-image` scheme, keyed by
+   * its UUID — the same boundary the IPC layer enforces: only ids that exist
+   * in the database are ever resolvable, and the id must be UUID-shaped.
+   */
+  handleImageRequest(request: Request): Response {
+    let id = '';
+    try {
+      id = new URL(request.url).hostname;
+    } catch {
+      return new Response('Bad request', { status: 400 });
+    }
+    if (!IMAGE_ID_PATTERN.test(id)) return new Response('Not found', { status: 404 });
+    const row = this.database.sqlite.prepare('SELECT content, mime_type FROM skill_note_images WHERE id = ?').get(id) as { content: Buffer; mime_type: string } | undefined;
+    if (!row) return new Response('Not found', { status: 404 });
+    return new Response(new Uint8Array(Buffer.from(row.content)), {
+      status: 200,
+      headers: { 'content-type': row.mime_type, 'cache-control': 'no-store' }
+    });
   }
 
   removeImage(skillId: string, imageId: string): SkillNote {
@@ -87,21 +116,20 @@ export class NoteService {
   }
 }
 
+function toImageUrl(id: string): string {
+  return `skill-note-image://${id}`;
+}
+
 function mapImage(row: ImageRow): SkillNoteImage {
-  const content = Buffer.from(row.content);
   return {
     id: row.id,
     skillId: row.skill_id,
     filename: row.filename,
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
-    dataUrl: toDataUrl(row.mime_type, content),
+    url: toImageUrl(row.id),
     createdAt: row.created_at
   };
-}
-
-function toDataUrl(mimeType: SkillNoteImage['mimeType'], content: Buffer): string {
-  return `data:${mimeType};base64,${content.toString('base64')}`;
 }
 
 function detectRasterImage(content: Buffer): SkillNoteImage['mimeType'] | null {

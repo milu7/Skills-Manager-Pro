@@ -1,6 +1,26 @@
 /** Local AI tool locations imported from the supplied adapter catalogue. */
 export interface AiToolLocation { key: string; displayName: string; skillsDir: string; detectDir: string; }
 
+/**
+ * The three first-class hosts that the workbench seeds and labels explicitly.
+ * Every other catalog tool keeps its own key as host id.
+ */
+export const FIRST_CLASS_HOSTS = ['codex', 'claude', 'workbuddy'] as const;
+
+/**
+ * Canonical host id for a catalog tool key. Several tools reuse a shared
+ * directory that already belongs to a first-class host (Codex's ~/.agents/skills,
+ * Claude's ~/.claude/skills), and TRAE CN installs into several read-only roots
+ * that belong to one TRAE platform. Aliasing keeps those directories on a
+ * single host instead of letting the last catalog entry claim them.
+ */
+export function toolHostKey(key: string): string {
+  if (key === 'cline' || key === 'warp') return 'codex'; // share ~/.agents/skills with Codex
+  if (key === 'claude_code') return 'claude'; // Claude Code uses ~/.claude/skills
+  if (key.startsWith('trae_cn')) return 'trae'; // TRAE CN builtin / plugin roots belong to TRAE
+  return key;
+}
+
 const RAW_AI_TOOL_LOCATIONS: Array<[string, string, string, string]> = [
   ['cursor', 'Cursor', '.cursor/skills', '.cursor'], ['claude_code', 'Claude Code', '.claude/skills', '.claude'],
   ['omp_agent', 'OMP Agent', '.omp/agent/skills', '.omp/agent'], ['codex', 'Codex', '.codex/skills', '.codex'],

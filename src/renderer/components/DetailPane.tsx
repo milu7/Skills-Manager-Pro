@@ -12,6 +12,7 @@ import { AiPanel } from './AiPanel';
 import { RenameDialog } from './RenameDialog';
 import { NotePanel } from './NotePanel';
 import { useTranslation } from 'react-i18next';
+import { isToolHost } from '../i18n';
 
 export function DetailPane() {
   const { t } = useTranslation();
@@ -47,7 +48,7 @@ export function DetailPane() {
   return (
     <aside className={clsx('detail-pane', detailLoading && 'is-loading')}>
       <header className="detail-header">
-        <div className={`detail-monogram monogram-${details.host}`}>{monogram(details.displayName)}</div>
+        <div className={clsx('detail-monogram', `monogram-${details.host}`, isToolHost(details.host) && 'is-tool')}>{monogram(details.displayName)}</div>
         <div className="detail-heading">
           <div className="detail-title-line"><h2>{details.displayName}</h2>{details.writable ? <StatusPill tone="green">{t('status.editable')}</StatusPill> : <StatusPill tone={isProtectedReadOnly(details) ? 'red' : 'neutral'}>{t('status.readOnly')}</StatusPill>}</div>
           <p>{details.path}</p>

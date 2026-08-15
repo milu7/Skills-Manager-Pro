@@ -53,7 +53,6 @@ export function TopBar({ onManageRoots }: { onManageRoots(): void }) {
       <button className="brand" type="button" onClick={() => setView('skills')} aria-label={t('app.home')}>
         <span className="brand-copy">
           <span className="brand-title"><strong>{t('app.title')}</strong>{version && <span className="brand-version"><i />v{version}</span>}</span>
-          <span className="brand-meta"><small>{t('app.author')}</small></span>
         </span>
       </button>
       <div className="global-search" data-disabled={view !== 'skills'}>

@@ -1,3 +1,5 @@
+export const APP_GITHUB_URL = 'https://github.com/milu7/Skills-Manager-Pro';
+
 export const SKILL_CATEGORIES = [
   '写作内容', '视觉设计', '开发工程', '自动化', '数据办公', '研究分析',
   '发布运营', '安全合规', '商业金融', '平台管理', '未分类'

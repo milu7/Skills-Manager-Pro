@@ -7,6 +7,7 @@ import installer from 'electron-winstaller';
 const { createWindowsInstaller } = installer;
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await fs.readFile(path.join(projectRoot, 'package.json'), 'utf8'));
+const author = packageJson.author ?? packageJson.productName;
 const packagedApp = path.join(projectRoot, 'out', `${packageJson.productName}-win32-x64`);
 const finalOutput = path.join(projectRoot, 'out', 'make', 'squirrel.windows', 'x64');
 const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-manager-pro-squirrel-'));
@@ -24,8 +25,8 @@ try {
     outputDirectory: stagingOutput,
     name: 'skills_manager_pro',
     title: 'Skills Manager Pro',
-    authors: packageJson.author,
-    owners: packageJson.author,
+    authors: author,
+    owners: author,
     description: '本地 Skill 管理、分析与安全编辑工作台',
     version: packageJson.version,
     exe: 'SkillsManagerPro.exe',

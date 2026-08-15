@@ -2,8 +2,8 @@ import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { ImagePlus, LoaderCircle, NotebookPen, Save, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeSanitize from 'rehype-sanitize';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import type { SkillDetails, SkillNote, SkillNoteImage } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
@@ -12,7 +12,20 @@ import { useTranslation } from 'react-i18next';
 import { activeLocale } from '../i18n';
 
 const IMAGE_MARKER = /skill-note-image:([0-9a-f-]{36})/gi;
+const IMAGE_URL_PATTERN = /^skill-note-image:\/\/([0-9a-f-]{36})$/i;
 const NOTE_EDITOR_EXTENSIONS = [markdown(), EditorView.lineWrapping];
+
+// rehype-sanitize drops unknown URL protocols from img src; the custom
+// skill-note-image scheme is deliberately allowed (ids are UUIDs, the main
+// process resolves them against the database only). Note the protocol map is
+// keyed by *property name* (src), not by tag.
+const noteSanitizeOptions = {
+  ...defaultSchema,
+  protocols: {
+    ...(defaultSchema.protocols ?? {}),
+    src: [...(defaultSchema.protocols?.src ?? []), 'skill-note-image']
+  }
+};
 
 export function NotePanel({ skill }: { skill: SkillDetails }) {
   const { t } = useTranslation();
@@ -75,7 +88,7 @@ export function NotePanel({ skill }: { skill: SkillDetails }) {
     finally { setBusy(false); }
   };
 
-  const previewBody = useMemo(() => body.replace(IMAGE_MARKER, (_match, id: string) => `https://skill-note.local/${id}`), [body]);
+  const previewBody = useMemo(() => body.replace(IMAGE_MARKER, (_match, id: string) => `skill-note-image://${id}`), [body]);
 
   if (loading) return <div className="center-loader"><LoaderCircle className="spin" /></div>;
 
@@ -99,7 +112,8 @@ export function NotePanel({ skill }: { skill: SkillDetails }) {
             {body.trim() ? (
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeSanitize]}
+                rehypePlugins={[[rehypeSanitize, noteSanitizeOptions]]}
+                urlTransform={(url) => (url.startsWith('skill-note-image://') ? url : defaultUrlTransform(url))}
                 components={{
                   img: ({ src, alt, title }) => <NoteImage src={src} alt={alt} title={title} images={note?.images ?? []} />,
                   a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>
@@ -114,7 +128,7 @@ export function NotePanel({ skill }: { skill: SkillDetails }) {
           <header><strong>{t('workbench:notes.images')}</strong><span>{t('workbench:notes.imageCount', { count: note?.images.length })}</span></header>
           <div>{note?.images.map((image) => (
             <figure key={image.id}>
-              <img src={image.dataUrl} alt={image.filename} />
+              <img src={image.url} alt={image.filename} />
               <figcaption><span title={image.filename}>{image.filename}</span><small>{formatBytes(image.sizeBytes)}</small></figcaption>
               <button type="button" aria-label={t('workbench:notes.removeImage', { name: image.filename })} disabled={busy} onClick={() => void removeImage(image)}><Trash2 size={14} /></button>
             </figure>
@@ -127,10 +141,10 @@ export function NotePanel({ skill }: { skill: SkillDetails }) {
 
 function NoteImage({ src, alt, title, images }: { src?: string; alt?: string; title?: string; images: SkillNoteImage[] }) {
   const { t } = useTranslation();
-  const id = src?.match(/^https:\/\/skill-note\.local\/([0-9a-f-]{36})$/i)?.[1];
+  const id = src?.match(IMAGE_URL_PATTERN)?.[1];
   const image = images.find((item) => item.id === id);
-  if (!image) return <span className="note-image-missing">{t('workbench:notes.imageUnavailable', { name: alt || t('workbench:notes.unnamedImage') })}</span>;
-  return <img src={image.dataUrl} alt={alt || image.filename} title={title} loading="lazy" />;
+  if (!image || !src) return <span className="note-image-missing">{t('workbench:notes.imageUnavailable', { name: alt || t('workbench:notes.unnamedImage') })}</span>;
+  return <img src={src} alt={alt || image.filename} title={title} loading="lazy" />;
 }
 
 function markdownAlt(value: string, fallback: string): string {

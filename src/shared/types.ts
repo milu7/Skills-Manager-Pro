@@ -1,4 +1,10 @@
-export type HostPlatform = 'codex' | 'claude' | 'workbuddy' | 'custom';
+/**
+ * Platform identity of a scanned root / Skill. The four canonical ids are
+ * always valid; any other discovered AI tool (TRAE, Cursor, Windsurf, …)
+ * becomes its own host id so it can surface in the Platform sidebar instead
+ * of being collapsed into `custom`.
+ */
+export type HostPlatform = 'codex' | 'claude' | 'workbuddy' | 'custom' | (string & {});
 export type SkillScope = 'user' | 'project' | 'plugin' | 'system';
 export type SkillSourceType =
   | 'user'
@@ -127,7 +133,8 @@ export interface SkillNoteImage {
   filename: string;
   mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
   sizeBytes: number;
-  dataUrl: string;
+  /** skill-note-image://<id> URL served by the main process (no base64 payloads). */
+  url: string;
   createdAt: string;
 }
 
@@ -164,7 +171,7 @@ export interface SkillStats {
   duplicates: number;
   disabled: number;
   trashed: number;
-  byHost: Record<HostPlatform, number>;
+  byHost: Record<string, number>;
   bySource: Partial<Record<SkillSourceType, number>>;
   categories: Array<{ name: string; count: number }>;
 }
@@ -305,11 +312,24 @@ export interface SaveAiProviderInput {
   enabled: boolean;
 }
 
+/**
+ * Stable, locale-independent reason codes for AI attachment classification
+ * (optimization plan #15). The renderer translates them at display time, so
+ * changing copy can never silently break the matching.
+ */
+export type AiAttachmentReason =
+  | 'file-too-large'
+  | 'host-metadata'
+  | 'text-attachment'
+  | 'script-never'
+  | 'binary-never'
+  | 'over-limit';
+
 export interface AiAttachmentCandidate {
   relativePath: string;
   sizeBytes: number;
   includedByDefault: boolean;
-  reason: string;
+  reason: AiAttachmentReason;
 }
 
 export interface AiInputPreview {

@@ -15,6 +15,7 @@ import type {
 } from '../shared/types';
 import type { DatabaseContext } from './db/database';
 import type { SkillRow } from './db/schema';
+import { pruneActions, pruneSnapshots } from './db/retention';
 import { ScannerService } from './scanner-service';
 import { parseSkillDocument, updateArbitraryFrontmatterField, updateSkillBody, updateSkillMetadata } from './skill-document';
 import { SkillRepository } from './skill-repository';
@@ -454,6 +455,7 @@ export class OperationsService {
       INSERT INTO snapshots (id, skill_id, relative_path, content, content_hash, newline, has_bom, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, skillId, relativePath, content, sha256(content), newline, Number(hasBom), reason, nowIso());
+    pruneSnapshots(this.database.sqlite, skillId);
     return id;
   }
 
@@ -478,6 +480,7 @@ export class OperationsService {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, input.skillId, input.action, input.path, input.relativePath, input.summary, input.beforeHash,
       input.afterHash, input.afterContent, input.snapshotId, JSON.stringify(input.metadata), nowIso(), Number(input.reversible));
+    pruneActions(this.database.sqlite);
     return id;
   }
 

@@ -1,7 +1,7 @@
 {
   "name": "skills-manager-pro",
   "productName": "Skills Manager Pro",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Local Skills management for Codex, Claude, and WorkBuddy",
   "main": ".webpack/main",
   "private": true,
@@ -19,7 +19,6 @@
     "smoke:packaged": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-packaged.ps1",
     "check": "npm run typecheck && npm run test && npm run build && npm run test:installer-startup && npm run test:e2e"
   },
-  "author": "暴论哥3.0（公众号同名）",
   "license": "MIT",
   "config": {
     "forge": "./forge.config.js"

@@ -1,9 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AiAnalysis, AiAnalysisPayload, AiInputPreview, RunAiInput, SupportedLocale } from '../shared/types';
+import type { AiAnalysis, AiAnalysisPayload, AiAttachmentCandidate, AiInputPreview, RunAiInput, SupportedLocale } from '../shared/types';
 import { aiAnalysisJsonSchema, aiAnalysisPayloadSchema } from '../shared/schemas';
 import { INITIAL_CATEGORIES } from './analysis/local-analyzer';
 import type { DatabaseContext } from './db/database';
+import { pruneActions, pruneAnalyses } from './db/retention';
 import { OperationsService } from './operations-service';
 import { fetchWithTimeout, ProviderService, providerEndpoint, providerHeaders, safeHttpError } from './provider-service';
 import { SkillRepository } from './skill-repository';
@@ -33,27 +34,23 @@ export class AiService {
     const mainFile = skill.files.find((file) => file.relativePath.toLocaleLowerCase('en-US') === 'skill.md');
     const attachments = skill.files
       .filter((file) => file.relativePath.toLocaleLowerCase('en-US') !== 'skill.md' && file.text && file.kind !== 'script')
-      .map((file) => ({
+      .map((file): AiAttachmentCandidate => ({
         relativePath: file.relativePath,
         sizeBytes: file.sizeBytes,
         includedByDefault: false,
-        reason: file.sizeBytes > ATTACHMENT_BUDGET
-          ? this.message('aiReason.fileTooLarge', '单文件超过 200 KB，不能发送')
-          : file.kind === 'metadata'
-            ? this.message('aiReason.metadataOptional', '宿主 UI 元数据，可选发送')
-            : this.message('aiReason.textOptional', '文本附件，由你确认后发送')
+        reason: file.sizeBytes > ATTACHMENT_BUDGET ? 'file-too-large'
+          : file.kind === 'metadata' ? 'host-metadata'
+            : 'text-attachment'
       }));
     const excluded = skill.files
       .filter((file) => file.kind === 'script' || !file.text || file.sizeBytes > ATTACHMENT_BUDGET)
-      .map((file) => ({
+      .map((file): AiAttachmentCandidate => ({
         relativePath: file.relativePath,
         sizeBytes: file.sizeBytes,
         includedByDefault: false,
-        reason: file.kind === 'script'
-          ? this.message('aiReason.scriptNever', '脚本永不发送')
-          : !file.text
-            ? this.message('aiReason.binaryNever', '二进制文件永不发送')
-            : this.message('aiReason.overLimit', '超过 200 KB 上限')
+        reason: file.kind === 'script' ? 'script-never'
+          : !file.text ? 'binary-never'
+            : 'over-limit'
       }));
     return {
       skillId,
@@ -157,6 +154,8 @@ export class AiService {
           model: provider.model,
           outputLocale
         }), createdAt);
+      pruneAnalyses(this.database.sqlite, skill.id);
+      pruneActions(this.database.sqlite);
     })();
     return { id, skillId: skill.id, providerId: provider.id, providerName: provider.name, model: provider.model,
       protocol: provider.protocol, contentHash: skill.contentHash, stale: false, inputFiles, inputBytes, outputLocale, createdAt, ...payload };

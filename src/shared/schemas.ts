@@ -9,7 +9,7 @@ export const localePreferenceSchema = z.enum(['system', 'zh-CN', 'en-US']);
 export const skillListFiltersSchema = z
   .object({
     query: z.string().max(200).optional(),
-    hosts: z.array(z.enum(['codex', 'claude', 'workbuddy', 'custom'])).optional(),
+    hosts: z.array(z.string().trim().min(1).max(50)).optional(),
     sourceTypes: z
       .array(z.enum(['user', 'project', 'plugin', 'builtin', 'marketplace', 'cache', 'trash', 'backup']))
       .optional(),

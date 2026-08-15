@@ -117,7 +117,8 @@ export class ScannerService {
     if (!rootRow) throw new Error(localizeMessage(this.translate, 'error.skillRootMissing', 'Skill 根目录不存在'));
     const root = mapRoot(rootRow);
     const token = createId();
-    const indexed = await this.indexSkill(root, path.join(row.path, 'SKILL.md'), token, row);
+    const rootRealPath = await fs.realpath(root.path).catch(() => root.path);
+    const indexed = await this.indexSkill(root, rootRealPath, path.join(row.path, 'SKILL.md'), token, row);
     this.upsertIndexed(indexed, row);
     this.recomputeDuplicates();
     const refreshed = this.repository.get(skillId);
@@ -195,6 +196,11 @@ export class ScannerService {
       return;
     }
     const scanToken = createId();
+    // Canonicalize the root once per scan. The configured root path may use a
+    // different textual form than what fs.realpath returns (8.3 short names,
+    // junctions, or a \\?\ prefix), which would otherwise falsely flag every
+    // Skill under the root as a symlink escape on some Windows setups.
+    const rootRealPath = await fs.realpath(root.path).catch(() => root.path);
     const patterns = root.sourceType === 'project'
       ? ['SKILL.md', '**/{.agents,.codex,.claude,.workbuddy}/skills/**/SKILL.md']
       : ['**/SKILL.md'];
@@ -228,7 +234,7 @@ export class ScannerService {
         if (!mainFile) continue;
         try {
           const existing = this.repository.findRowByNormalizedPath(normalizeFsPath(path.dirname(mainFile)));
-          const indexed = await this.indexSkill(root, mainFile, scanToken, existing);
+          const indexed = await this.indexSkill(root, rootRealPath, mainFile, scanToken, existing);
           // better-sqlite3 is synchronous, so writes remain serialized on this thread.
           this.upsertIndexed(indexed, existing);
           rootCount += 1;
@@ -246,11 +252,11 @@ export class ScannerService {
     })();
   }
 
-  private async indexSkill(root: SkillRoot, mainFile: string, scanToken: string, existing?: SkillRow): Promise<IndexedSkill> {
+  private async indexSkill(root: SkillRoot, rootRealPath: string, mainFile: string, scanToken: string, existing?: SkillRow): Promise<IndexedSkill> {
     const skillPath = path.dirname(mainFile);
     const folderName = path.basename(skillPath);
     const realPath = await fs.realpath(skillPath).catch(() => skillPath);
-    const escapedSymlink = !isPathInside(root.path, realPath);
+    const escapedSymlink = !isPathInside(rootRealPath, realPath);
     const identity = inferIdentity(root, skillPath);
     const manifestIdentity = this.pluginManifests.classify(identity.host, skillPath, identity.sourceType);
     if (manifestIdentity.parentPlugin) {

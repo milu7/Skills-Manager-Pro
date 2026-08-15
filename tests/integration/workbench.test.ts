@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http, { type Server } from 'node:http';
 import os from 'node:os';
@@ -7,12 +7,14 @@ import BetterSqlite3 from 'better-sqlite3/win32-x64';
 import { AiService } from '../../src/main/ai-service';
 import { closeDatabase, openDatabase, type DatabaseContext } from '../../src/main/db/database';
 import { migrations } from '../../src/main/db/migrations';
+import { pruneAnalyses } from '../../src/main/db/retention';
 import { OperationsService } from '../../src/main/operations-service';
 import { NoteService } from '../../src/main/note-service';
 import type { RuntimeProvider } from '../../src/main/provider-service';
 import { RootsService } from '../../src/main/roots-service';
 import { ScannerService } from '../../src/main/scanner-service';
 import { SkillRepository } from '../../src/main/skill-repository';
+import { normalizeFsPath } from '../../src/main/utils';
 
 interface Harness {
   base: string;
@@ -36,7 +38,7 @@ afterEach(async () => {
 });
 
 describe('workbench integration', () => {
-  it('upgrades an existing v1 index with note tables without rebuilding user data', async () => {
+  it('upgrades a v3 index: adds foreign keys, clears orphans, and applies retention caps', async () => {
     const base = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-migration-'));
     temporaryPaths.push(base);
     const userData = path.join(base, 'user-data');
@@ -44,13 +46,92 @@ describe('workbench integration', () => {
     const databasePath = path.join(userData, 'skill-workbench.sqlite3');
     const legacy = new BetterSqlite3(databasePath);
     legacy.exec(migrations[0].sql);
-    legacy.pragma('user_version = 1');
+    legacy.exec(migrations[1].sql);
+    legacy.exec(migrations[2].sql);
+    legacy.pragma('user_version = 3');
+
+    const skillPath = path.join(base, 'project', '.agents', 'skills', 'demo');
+    legacy.prepare(`
+      INSERT INTO skills (id, root_id, host, scope, source_type, state, path, normalized_path, real_path,
+        folder_name, name, display_name, description, category, suggested_category, tags_json, writable,
+        content_hash, main_file_hash, normalized_content_hash, search_text, frontmatter_json, body_cache,
+        files_json, file_count, size_bytes, line_count, has_scripts, has_references, has_assets,
+        has_agent_metadata, health, diagnostics_json, updated_at, indexed_at, scan_token)
+      VALUES (?, 'root', 'codex', 'user', 'user', 'active', ?, ?, ?, 'demo', 'demo', 'demo', 'desc',
+        '未分类', '未分类', '[]', 1, 'content-hash', 'main-hash', 'norm-hash', 'search', '{}', 'body',
+        '[]', 1, 10, 1, 0, 0, 0, 0, 'healthy', '[]', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'token')
+    `).run('skill-1', skillPath, skillPath.toLowerCase(), skillPath);
+    const snapshotInsert = legacy.prepare(`
+      INSERT INTO snapshots (id, skill_id, relative_path, content, content_hash, newline, has_bom, reason, created_at)
+      VALUES (?, ?, 'SKILL.md', ?, ?, 'lf', 0, 'seed', ?)
+    `);
+    for (let index = 0; index < 25; index += 1) {
+      const createdAt = `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`;
+      snapshotInsert.run(`snap-${index}`, 'skill-1', `content-${index}`, `hash-${index}`, createdAt);
+    }
+    snapshotInsert.run('snap-orphan', 'missing-skill', 'orphan', 'orphan-hash', '2026-01-01T00:00:00.000Z');
+    legacy.prepare(`
+      INSERT INTO actions (id, skill_id, action, path, summary, metadata_json, created_at, reversible)
+      VALUES (?, ?, 'edit_body', ?, 'summary', '{}', '2026-01-01T00:00:00.000Z', 1)
+    `).run('action-valid', 'skill-1', skillPath);
+    legacy.prepare(`
+      INSERT INTO actions (id, skill_id, action, path, summary, metadata_json, created_at, reversible)
+      VALUES (?, NULL, 'edit_body', ?, 'summary', '{}', '2026-01-01T00:00:00.000Z', 1)
+    `).run('action-null-skill', skillPath);
+    legacy.prepare(`
+      INSERT INTO actions (id, skill_id, action, path, summary, metadata_json, created_at, reversible)
+      VALUES (?, 'missing-skill', 'edit_body', ?, 'summary', '{}', '2026-01-01T00:00:00.000Z', 1)
+    `).run('action-orphan', skillPath);
+    const analysisInsert = legacy.prepare(`
+      INSERT INTO ai_analyses (id, skill_id, provider_id, provider_name, model, protocol, content_hash,
+        prompt_version, cache_key, payload_json, input_files_json, input_bytes, output_locale, created_at)
+      VALUES (?, 'skill-1', 'provider', 'Mock', 'model', 'chat_completions', 'content-hash', 'v',
+        ?, '{}', '[]', 0, 'zh-CN', ?)
+    `);
+    for (let index = 0; index < 12; index += 1) {
+      analysisInsert.run(`analysis-${index}`, `cache-${index}`, `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`);
+    }
+    analysisInsert.run('analysis-orphan', 'cache-orphan', '2026-01-01T00:00:00.000Z');
+    legacy.prepare("INSERT INTO skill_notes (skill_id, body, updated_at) VALUES ('skill-1', 'note', '2026-01-01T00:00:00.000Z')").run();
+    legacy.prepare("INSERT INTO skill_notes (skill_id, body, updated_at) VALUES ('missing-skill', 'orphan', '2026-01-01T00:00:00.000Z')").run();
+    legacy.prepare(`
+      INSERT INTO skill_note_images (id, skill_id, filename, mime_type, content, size_bytes, created_at)
+      VALUES ('image-1', 'skill-1', 'a.png', 'image/png', X'89504E47', 4, '2026-01-01T00:00:00.000Z')
+    `).run();
+    legacy.prepare(`
+      INSERT INTO skill_note_images (id, skill_id, filename, mime_type, content, size_bytes, created_at)
+      VALUES ('image-orphan', 'missing-skill', 'b.png', 'image/png', X'89504E47', 4, '2026-01-01T00:00:00.000Z')
+    `).run();
     legacy.close();
 
     const upgraded = openDatabase(userData);
-    expect(Number(upgraded.sqlite.pragma('user_version', { simple: true }))).toBe(3);
+    expect(Number(upgraded.sqlite.pragma('user_version', { simple: true }))).toBe(5);
     const tables = upgraded.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
-    expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(['skills', 'skill_notes', 'skill_note_images']));
+    expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(['skills', 'snapshots', 'actions', 'skill_notes', 'skill_note_images', 'ai_analyses']));
+
+    // The v5 migration clears the historical body_cache (bodies now come from disk).
+    expect(upgraded.sqlite.prepare("SELECT body_cache FROM skills WHERE id = 'skill-1'").get()).toEqual({ body_cache: '' });
+
+    // Orphans are gone and retention caps applied (20 snapshots, 10 analyses).
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM snapshots').get()).toEqual({ count: 20 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM ai_analyses').get()).toEqual({ count: 10 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM actions').get()).toEqual({ count: 2 });
+    expect(upgraded.sqlite.prepare('SELECT skill_id FROM actions WHERE id = ?').get('action-null-skill')).toEqual({ skill_id: null });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM skill_notes').get()).toEqual({ count: 1 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM skill_note_images').get()).toEqual({ count: 1 });
+
+    // Foreign keys are now enforced...
+    expect(() => upgraded.sqlite.prepare(`
+      INSERT INTO snapshots (id, skill_id, relative_path, content, content_hash, newline, has_bom, reason, created_at)
+      VALUES ('ghost', 'no-such-skill', 'SKILL.md', 'x', 'h', 'lf', 0, 'x', '2026-01-01T00:00:00.000Z')
+    `).run()).toThrow(/FOREIGN KEY/);
+    // ...and deleting a Skill cascades to all child tables.
+    upgraded.sqlite.prepare("DELETE FROM skills WHERE id = 'skill-1'").run();
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM snapshots').get()).toEqual({ count: 0 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM ai_analyses').get()).toEqual({ count: 0 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM actions').get()).toEqual({ count: 1 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM skill_notes').get()).toEqual({ count: 0 });
+    expect(upgraded.sqlite.prepare('SELECT COUNT(*) AS count FROM skill_note_images').get()).toEqual({ count: 0 });
   });
 
   it('indexes Codex metadata and never executes scripts while scanning', async () => {
@@ -76,6 +157,148 @@ describe('workbench integration', () => {
     });
     expect(original.family?.installationIds).toHaveLength(2);
     expect(original.family?.hosts).toEqual(expect.arrayContaining(['codex', 'claude']));
+  });
+
+  it('skips full-row rewrites for unchanged Skills and refreshes only derived changes', async () => {
+    const harness = await createHarness();
+
+    // (a) An unchanged library is not rewritten: indexed_at / updated_at stay stable.
+    const before = harness.repository.get(harness.skillId);
+    await harness.scanner.scanAll();
+    const after = harness.repository.get(harness.skillId);
+    expect(after.indexedAt).toBe(before.indexedAt);
+    expect(after.updatedAt).toBe(before.updatedAt);
+
+    // (b) A sidecar change without touching SKILL.md still refreshes the inventory.
+    await fs.appendFile(path.join(harness.skillPath, 'references', 'guide.md'), '\nExtra notes.\n', 'utf8');
+    await harness.scanner.scanAll();
+    const afterSidecar = harness.repository.get(harness.skillId);
+    expect(afterSidecar.updatedAt).toBe(after.updatedAt);
+    expect(afterSidecar.sizeBytes).toBeGreaterThan(after.sizeBytes);
+
+    // (c) A display override with no file change still lands through rescanSkill.
+    const claudePath = path.join(harness.project, '.claude', 'skills', 'helper');
+    await fs.mkdir(claudePath, { recursive: true });
+    await fs.writeFile(path.join(claudePath, 'SKILL.md'), '---\nname: helper\ndescription: A helper.\n---\n\nBody.\n');
+    await harness.scanner.scanAll();
+    const claude = harness.repository.list({ state: 'active' }).items.find((item) => item.host === 'claude');
+    if (!claude) throw new Error('Claude fixture was not indexed');
+    expect(claude.displayName).toBe('helper');
+    harness.database.sqlite.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(`display:${normalizeFsPath(claude.path)}`, '展示助手', new Date().toISOString());
+    await harness.scanner.rescanSkill(claude.id);
+    expect(harness.repository.get(claude.id).displayName).toBe('展示助手');
+    // The single-skill rescan leaves other rows untouched.
+    expect(harness.repository.get(harness.skillId).indexedAt).toBe(afterSidecar.indexedAt);
+  });
+
+  it('assigns exact, near and name duplicate kinds with the narrowed candidate set', async () => {
+    const harness = await createHarness();
+
+    // Byte-identical copy of the fixture → exact group.
+    const mirrorPath = path.join(harness.project, '.agents', 'skills', 'demo-skill-mirror');
+    await fs.mkdir(mirrorPath, { recursive: true });
+    await fs.copyFile(path.join(harness.skillPath, 'SKILL.md'), path.join(mirrorPath, 'SKILL.md'));
+    await harness.scanner.scanAll();
+    const original = harness.repository.get(harness.skillId);
+    const mirror = harness.repository.list({ state: 'active' }).items.find((item) => item.folderName === 'demo-skill-mirror');
+    if (!mirror) throw new Error('Mirror fixture was not indexed');
+    expect(original.duplicateKind).toBe('exact');
+    expect(mirror.duplicateKind).toBe('exact');
+    expect(original.duplicateGroup).toBe(mirror.duplicateGroup);
+    expect(original.duplicateGroup).toMatch(/^exact-/);
+
+    // Same logical name with different content → name group.
+    const claudePath = path.join(harness.project, '.claude', 'skills', 'demo-skill');
+    await fs.mkdir(claudePath, { recursive: true });
+    await fs.writeFile(path.join(claudePath, 'SKILL.md'), '---\nname: demo-skill\ndescription: Different Claude copy.\n---\n\nDifferent body.\n');
+    await harness.scanner.scanAll();
+    const claude = harness.repository.list({ state: 'active' }).items.find((item) => item.host === 'claude');
+    if (!claude) throw new Error('Claude fixture was not indexed');
+    expect(claude.duplicateKind).toBe('name');
+    expect(claude.duplicateGroup).toMatch(/^name-/);
+
+    // Near grouping is made deterministic by injecting identical normalized
+    // hashes into the database: the unchanged rows skip the rewrite on the
+    // following scan (upsert skip), so the injected values survive until
+    // recomputeDuplicates reads them. near-a and near-c share content (exact
+    // pair); near-b only shares the injected near hash.
+    const nearBase = path.join(harness.project, '.agents', 'skills');
+    for (const name of ['near-a', 'near-b']) {
+      const dir = path.join(nearBase, name);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: near test.\n---\n\nBody.\n`);
+    }
+    const nearC = path.join(nearBase, 'near-c');
+    await fs.mkdir(nearC, { recursive: true });
+    await fs.copyFile(path.join(nearBase, 'near-a', 'SKILL.md'), path.join(nearC, 'SKILL.md'));
+    await harness.scanner.scanAll();
+    const nearItems = harness.repository.list({ state: 'active' }).items.filter((item) => ['near-a', 'near-b', 'near-c'].includes(item.folderName));
+    expect(nearItems).toHaveLength(3);
+    const placeholders = nearItems.map(() => '?').join(', ');
+    harness.database.sqlite.prepare(`UPDATE skills SET normalized_content_hash = '0000000000000000' WHERE id IN (${placeholders})`).run(...nearItems.map((item) => item.id));
+    await harness.scanner.scanAll();
+
+    const nearASkill = harness.repository.get(nearItems.find((item) => item.folderName === 'near-a')!.id);
+    const nearBSkill = harness.repository.get(nearItems.find((item) => item.folderName === 'near-b')!.id);
+    const nearCSkill = harness.repository.get(nearItems.find((item) => item.folderName === 'near-c')!.id);
+    expect(nearASkill.duplicateKind).toBe('exact');
+    expect(nearCSkill.duplicateKind).toBe('exact');
+    expect(nearASkill.duplicateGroup).toBe(nearCSkill.duplicateGroup);
+    expect(nearBSkill.duplicateKind).toBe('near');
+    expect(nearBSkill.duplicateGroup).toMatch(/^near-/);
+  });
+
+  it('prunes snapshots, actions and analyses at write time within retention caps', async () => {
+    const harness = await createHarness();
+    const { sqlite } = harness.database;
+    const now = new Date().toISOString();
+    const snapshotInsert = sqlite.prepare(`
+      INSERT INTO snapshots (id, skill_id, relative_path, content, content_hash, newline, has_bom, reason, created_at)
+      VALUES (?, ?, 'SKILL.md', ?, ?, 'lf', 0, 'seed', ?)
+    `);
+    for (let index = 0; index < 25; index += 1) snapshotInsert.run(`snap-${index}`, harness.skillId, `c${index}`, `h${index}`, now);
+    const actionInsert = sqlite.prepare(`
+      INSERT INTO actions (id, skill_id, action, path, summary, metadata_json, created_at, reversible)
+      VALUES (?, ?, 'edit_body', ?, 's', '{}', ?, 1)
+    `);
+    for (let index = 0; index < 6000; index += 1) actionInsert.run(`act-${index}`, harness.skillId, harness.skillPath, now);
+    const analysisInsert = sqlite.prepare(`
+      INSERT INTO ai_analyses (id, skill_id, provider_id, provider_name, model, protocol, content_hash,
+        prompt_version, cache_key, payload_json, input_files_json, input_bytes, output_locale, created_at)
+      VALUES (?, ?, 'p', 'Mock', 'm', 'chat_completions', 'h', 'v', ?, '{}', '[]', 0, 'zh-CN', ?)
+    `);
+    for (let index = 0; index < 12; index += 1) analysisInsert.run(`an-${index}`, harness.skillId, `ck-${index}`, now);
+
+    // A real write path (updateBody → createSnapshot + insertAction) enforces
+    // the snapshot and action caps; the analysis cap is enforced by AiService.
+    const before = harness.repository.get(harness.skillId);
+    await harness.operations.updateBody({ skillId: harness.skillId, body: '# Updated\n\nFresh body.', expectedHash: before.mainFileHash });
+
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM snapshots').get()).toEqual({ count: 20 });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM actions').get()).toEqual({ count: 5000 });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM ai_analyses').get()).toEqual({ count: 12 });
+    pruneAnalyses(sqlite, harness.skillId);
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM ai_analyses').get()).toEqual({ count: 10 });
+  });
+
+  it('serves the Skill body from disk without storing a database copy', async () => {
+    const harness = await createHarness();
+    const before = harness.repository.get(harness.skillId);
+    expect(before.body).toContain('# Demo');
+
+    // The database no longer keeps the body: body_cache is empty after the scan.
+    expect(harness.database.sqlite.prepare('SELECT body_cache FROM skills WHERE id = ?').get(harness.skillId)).toEqual({ body_cache: '' });
+
+    // Editing the file on disk is reflected immediately, without rescanning.
+    await fs.writeFile(path.join(harness.skillPath, 'SKILL.md'), '---\nname: demo-skill\ndescription: Scan and edit a test skill.\n---\n\n# Changed externally\n');
+    expect(harness.repository.get(harness.skillId).body).toContain('# Changed externally');
+
+    // A missing main file degrades to an empty body instead of throwing.
+    await fs.rm(path.join(harness.skillPath, 'SKILL.md'), { force: true });
+    expect(harness.repository.get(harness.skillId).body).toBe('');
   });
 
   it('uses snapshots, preserves CRLF/BOM, and blocks external-write conflicts', async () => {
@@ -132,7 +355,7 @@ describe('workbench integration', () => {
     await fs.writeFile(imagePath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'));
     const image = await harness.notes.addImage(harness.skillId, imagePath);
     expect(image.mimeType).toBe('image/png');
-    expect(image.dataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(image.url).toMatch(/^skill-note-image:\/\/[0-9a-f-]{36}$/);
     harness.notes.save({ skillId: harness.skillId, body: `${saved.body}\n\n![示例](skill-note-image:${image.id})` });
     const loaded = harness.notes.get(harness.skillId);
     expect(loaded.images).toHaveLength(1);
@@ -146,6 +369,31 @@ describe('workbench integration', () => {
     const afterRemoval = harness.notes.removeImage(harness.skillId, image.id);
     expect(afterRemoval.images).toHaveLength(0);
     expect(afterRemoval.body).not.toContain(image.id);
+  });
+
+  it('serves note images over the custom protocol and enforces the per-Skill quota', async () => {
+    const harness = await createHarness();
+    const pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const smallPath = path.join(harness.base, 'note-small.png');
+    await fs.writeFile(smallPath, Buffer.concat([pngMagic, Buffer.from('payload')]));
+    const image = await harness.notes.addImage(harness.skillId, smallPath);
+
+    // The protocol resolves only UUID ids that exist in the database.
+    const served = harness.notes.handleImageRequest(new Request(image.url));
+    expect(served.status).toBe(200);
+    expect(served.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await served.arrayBuffer()).subarray(0, 8)).toEqual(pngMagic);
+    expect(harness.notes.handleImageRequest(new Request('skill-note-image://00000000-0000-0000-0000-000000000000')).status).toBe(404);
+    expect(harness.notes.handleImageRequest(new Request('skill-note-image://not-an-id')).status).toBe(404);
+
+    // Two ~7.9 MB images fit; a third pushes past the 20 MB per-Skill quota.
+    const bigPath = path.join(harness.base, 'note-big.png');
+    const bigContent = Buffer.concat([pngMagic, Buffer.alloc(7.9 * 1024 * 1024 - pngMagic.length, 1)]);
+    await fs.writeFile(bigPath, bigContent);
+    await harness.notes.addImage(harness.skillId, bigPath);
+    await harness.notes.addImage(harness.skillId, bigPath);
+    await expect(harness.notes.addImage(harness.skillId, bigPath)).rejects.toThrow(/20 MB/);
+    expect(harness.notes.get(harness.skillId).images).toHaveLength(3);
   });
 
   it('organizes a Skill only in the workbench index without moving or rewriting its source', async () => {
@@ -287,6 +535,80 @@ describe('workbench integration', () => {
     const timeoutProvider = { ...fakeProvider('chat_completions', timeoutUrl), id: crypto.randomUUID(), timeoutMs: 30 };
     const timeoutAi = new AiService(harness.database, harness.repository, harness.operations, { getRuntime: () => timeoutProvider } as never);
     await expect(timeoutAi.run(request(timeoutProvider))).rejects.toThrow(/请求超过/);
+  });
+
+  it('seeds a discovered TRAE root under its own host and indexes its skills there', async () => {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-trae-'));
+    temporaryPaths.push(base);
+    const home = path.join(base, 'home');
+    const traeSkills = path.join(home, '.trae', 'skills');
+    const skillPath = path.join(traeSkills, 'trae-demo');
+    await fs.mkdir(skillPath, { recursive: true });
+    await fs.writeFile(path.join(skillPath, 'SKILL.md'), '---\nname: trae-demo\ndescription: TRAE demo skill.\n---\n\nBody.\n');
+    const userData = path.join(base, 'user-data');
+    const homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(home);
+    try {
+      const database = openDatabase(userData);
+      const roots = new RootsService(database, userData);
+      await roots.initializeDefaults();
+      const traeRoot = roots.list().find((root) => root.host === 'trae');
+      expect(traeRoot).toBeDefined();
+      expect(traeRoot?.label).toBe('TRAE IDE Skills');
+      const repository = new SkillRepository(database);
+      const scanner = new ScannerService(database, repository);
+      await scanner.scanAll();
+      const result = repository.list({ state: 'active' });
+      expect(result.stats.byHost.trae).toBe(1);
+      expect(result.items.some((item) => item.host === 'trae' && item.folderName === 'trae-demo')).toBe(true);
+      expect(result.stats.byHost.custom).toBeUndefined();
+    } finally {
+      homedirSpy.mockRestore();
+      closeDatabase();
+    }
+  });
+
+  it('reclassifies rows previously indexed under custom when the root host changes', async () => {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-workbench-trae-migrate-'));
+    temporaryPaths.push(base);
+    const home = path.join(base, 'home');
+    const traeSkills = path.join(home, '.trae', 'skills');
+    const skillPath = path.join(traeSkills, 'trae-demo');
+    await fs.mkdir(skillPath, { recursive: true });
+    await fs.writeFile(path.join(skillPath, 'SKILL.md'), '---\nname: trae-demo\ndescription: TRAE demo skill.\n---\n\nBody.\n');
+    const userData = path.join(base, 'user-data');
+    const database = openDatabase(userData);
+    // Simulate the pre-fix state: the root and its skill are stored as custom.
+    database.sqlite.prepare(`
+      INSERT INTO roots (id, label, path, normalized_path, host, scope, source_type, writable,
+        recursive, enabled, discovered, last_scanned_at, skill_count, created_at)
+      VALUES ('trae-root', 'TRAE IDE Skills', ?, ?, 'custom', 'user', 'user', 1, 1, 1, 1, NULL, 0, ?)
+    `).run(traeSkills, normalizeFsPath(traeSkills), new Date().toISOString());
+    database.sqlite.prepare(`
+      INSERT INTO skills (id, root_id, host, scope, source_type, state, path, normalized_path, real_path,
+        folder_name, name, display_name, description, category, suggested_category, tags_json, writable,
+        content_hash, main_file_hash, normalized_content_hash, search_text, frontmatter_json, body_cache,
+        files_json, file_count, size_bytes, line_count, has_scripts, has_references, has_assets,
+        has_agent_metadata, health, diagnostics_json, updated_at, indexed_at, scan_token)
+      VALUES ('trae-skill', 'trae-root', 'custom', 'user', 'user', 'active', ?, ?, ?, 'trae-demo',
+        'trae-demo', 'trae-demo', 'desc', '未分类', '未分类', '[]', 1, 'content-hash', 'main-hash',
+        'norm-hash', 'search', '{}', '', '[]', 1, 10, 1, 0, 0, 0, 0, 'healthy', '[]',
+        '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'token')
+    `).run(skillPath, normalizeFsPath(skillPath), skillPath);
+    const homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(home);
+    try {
+      const roots = new RootsService(database, userData);
+      await roots.initializeDefaults();
+      expect(roots.list().find((root) => root.id === 'trae-root')?.host).toBe('trae');
+      const repository = new SkillRepository(database);
+      const scanner = new ScannerService(database, repository);
+      await scanner.scanAll();
+      const result = repository.list({ state: 'active' });
+      expect(result.stats.byHost.trae).toBe(1);
+      expect(result.items.some((item) => item.host === 'trae')).toBe(true);
+    } finally {
+      homedirSpy.mockRestore();
+      closeDatabase();
+    }
   });
 });
 

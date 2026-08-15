@@ -79,7 +79,7 @@ export const snapshots = sqliteTable(
   'snapshots',
   {
     id: text('id').primaryKey(),
-    skillId: text('skill_id').notNull(),
+    skillId: text('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
     relativePath: text('relative_path').notNull(),
     content: text('content').notNull(),
     contentHash: text('content_hash').notNull(),
@@ -95,7 +95,7 @@ export const actions = sqliteTable(
   'actions',
   {
     id: text('id').primaryKey(),
-    skillId: text('skill_id'),
+    skillId: text('skill_id').references(() => skills.id, { onDelete: 'cascade' }),
     action: text('action').notNull(),
     path: text('path').notNull(),
     relativePath: text('relative_path'),
@@ -131,7 +131,7 @@ export const aiAnalyses = sqliteTable(
   'ai_analyses',
   {
     id: text('id').primaryKey(),
-    skillId: text('skill_id').notNull(),
+    skillId: text('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
     providerId: text('provider_id').notNull(),
     providerName: text('provider_name').notNull(),
     model: text('model').notNull(),
@@ -158,7 +158,7 @@ export const settings = sqliteTable('settings', {
 });
 
 export const skillNotes = sqliteTable('skill_notes', {
-  skillId: text('skill_id').primaryKey(),
+  skillId: text('skill_id').primaryKey().references(() => skills.id, { onDelete: 'cascade' }),
   body: text('body').notNull().default(''),
   updatedAt: text('updated_at').notNull()
 });
@@ -167,7 +167,7 @@ export const skillNoteImages = sqliteTable(
   'skill_note_images',
   {
     id: text('id').primaryKey(),
-    skillId: text('skill_id').notNull(),
+    skillId: text('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
     filename: text('filename').notNull(),
     mimeType: text('mime_type').notNull(),
     content: blob('content', { mode: 'buffer' }).notNull(),

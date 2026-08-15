@@ -19,7 +19,7 @@ import type { SkillRow } from './db/schema';
 import { mapRoot } from './roots-service';
 import { parseSkillDocument } from './skill-document';
 import { SkillRepository } from './skill-repository';
-import { createId, detectTextFormat, errorMessage, isPathInside, localizeMessage, normalizeFsPath, nowIso, pathExists, sha256, toPosixPath, type MessageTranslator } from './utils';
+import { createId, detectTextFormat, errorMessage, isPathInside, localizeMessage, normalizeFsPath, normalizeLogicalName, nowIso, pathExists, sha256, toPosixPath, type MessageTranslator } from './utils';
 import { PluginManifestService } from './plugin-manifest-service';
 
 interface IndexedSkill {
@@ -117,8 +117,9 @@ export class ScannerService {
     if (!rootRow) throw new Error(localizeMessage(this.translate, 'error.skillRootMissing', 'Skill 根目录不存在'));
     const root = mapRoot(rootRow);
     const token = createId();
-    const indexed = await this.indexSkill(root, path.join(row.path, 'SKILL.md'), token, row);
-    this.upsertIndexed(indexed);
+    const rootRealPath = await fs.realpath(root.path).catch(() => root.path);
+    const indexed = await this.indexSkill(root, rootRealPath, path.join(row.path, 'SKILL.md'), token, row);
+    this.upsertIndexed(indexed, row);
     this.recomputeDuplicates();
     const refreshed = this.repository.get(skillId);
     return {
@@ -195,6 +196,11 @@ export class ScannerService {
       return;
     }
     const scanToken = createId();
+    // Canonicalize the root once per scan. The configured root path may use a
+    // different textual form than what fs.realpath returns (8.3 short names,
+    // junctions, or a \\?\ prefix), which would otherwise falsely flag every
+    // Skill under the root as a symlink escape on some Windows setups.
+    const rootRealPath = await fs.realpath(root.path).catch(() => root.path);
     const patterns = root.sourceType === 'project'
       ? ['SKILL.md', '**/{.agents,.codex,.claude,.workbuddy}/skills/**/SKILL.md']
       : ['**/SKILL.md'];
@@ -228,9 +234,9 @@ export class ScannerService {
         if (!mainFile) continue;
         try {
           const existing = this.repository.findRowByNormalizedPath(normalizeFsPath(path.dirname(mainFile)));
-          const indexed = await this.indexSkill(root, mainFile, scanToken, existing);
+          const indexed = await this.indexSkill(root, rootRealPath, mainFile, scanToken, existing);
           // better-sqlite3 is synchronous, so writes remain serialized on this thread.
-          this.upsertIndexed(indexed);
+          this.upsertIndexed(indexed, existing);
           rootCount += 1;
           this.setProgress({ ...this.progress, discoveredSkills: this.progress.discoveredSkills + 1 });
         } catch (error) {
@@ -246,11 +252,11 @@ export class ScannerService {
     })();
   }
 
-  private async indexSkill(root: SkillRoot, mainFile: string, scanToken: string, existing?: SkillRow): Promise<IndexedSkill> {
+  private async indexSkill(root: SkillRoot, rootRealPath: string, mainFile: string, scanToken: string, existing?: SkillRow): Promise<IndexedSkill> {
     const skillPath = path.dirname(mainFile);
     const folderName = path.basename(skillPath);
     const realPath = await fs.realpath(skillPath).catch(() => skillPath);
-    const escapedSymlink = !isPathInside(root.path, realPath);
+    const escapedSymlink = !isPathInside(rootRealPath, realPath);
     const identity = inferIdentity(root, skillPath);
     const manifestIdentity = this.pluginManifests.classify(identity.host, skillPath, identity.sourceType);
     if (manifestIdentity.parentPlugin) {
@@ -317,7 +323,9 @@ export class ScannerService {
       normalizedContentHash,
       searchText: `${name}\n${displayName}\n${description}\n${parsed.body}\n${skillPath}`,
       frontmatterJson: JSON.stringify(frontmatter),
-      bodyCache: parsed.body,
+      // #8: the full body is served from disk on demand (get() reads
+      // SKILL.md); only search_text keeps a full-text copy for search.
+      bodyCache: '',
       filesJson: JSON.stringify(inventory.files),
       fileCount: inventory.files.length,
       sizeBytes: inventory.sizeBytes,
@@ -334,7 +342,38 @@ export class ScannerService {
     };
   }
 
-  private upsertIndexed(skill: IndexedSkill): void {
+  /**
+   * Writes an indexed Skill into the database. When every scanner-derived
+   * field matches the stored row (main file content hash, main file mtime,
+   * the full file inventory, the computed display name and the resolved real
+   * path), the row is skipped: the 36-column UPSERT below — including
+   * search_text / body_cache / files_json — would otherwise rewrite tens of
+   * megabytes on every full rescan of an unchanged library. Only the scan
+   * token is refreshed so the stale-row cleanup at the end of a root scan
+   * still recognizes the row as visited.
+   *
+   * `existing` is the row the caller already loaded for the same normalized
+   * path (scanRoot / rescanSkill both fetch it before indexing); passing it
+   * avoids a second lookup per Skill. The six compared columns deliberately
+   * cover the fields that can change without the main file changing:
+   * host catches platform reclassification (e.g. a tool root that was seeded
+   * as `custom` before per-tool hosts existed), files_json catches sidecar
+   * changes, display_name catches display renames that only write the
+   * `display:` setting, real_path catches symlink retargets.
+   */
+  private upsertIndexed(skill: IndexedSkill, existing?: SkillRow): void {
+    if (
+      existing &&
+      existing.host === skill.host &&
+      existing.contentHash === skill.contentHash &&
+      existing.updatedAt === skill.updatedAt &&
+      existing.filesJson === skill.filesJson &&
+      existing.displayName === skill.displayName &&
+      existing.realPath === skill.realPath
+    ) {
+      this.database.sqlite.prepare('UPDATE skills SET scan_token = ? WHERE id = ?').run(skill.scanToken, existing.id);
+      return;
+    }
     this.database.sqlite.prepare(`
       INSERT INTO skills (
         id, root_id, host, scope, source_type, state, path, normalized_path, real_path,
@@ -377,10 +416,22 @@ export class ScannerService {
   private recomputeDuplicates(): void {
     const rows = this.database.sqlite.prepare(`
       SELECT id, name, content_hash, normalized_content_hash FROM skills WHERE state <> 'trash'
-    `).all() as Array<{ id: string; name: string; content_hash: string; normalized_content_hash: string }>;
+    `).all() as DuplicateCandidate[];
     const assignments = new Map<string, { kind: 'exact' | 'near' | 'name'; group: string }>();
     assignGroups(rows, (row) => row.content_hash, 'exact', assignments);
-    assignNearGroups(rows, assignments);
+    // Near detection only needs one representative per distinct content hash:
+    // identical rows produce identical band keys and pairwise distances, and
+    // every copy is already 'exact' (assigned first, never overwritten). This
+    // collapses libraries with many copies of the same Skill before the
+    // banded LSH pass, which is where the quadratic cost lives.
+    const representatives: DuplicateCandidate[] = [];
+    const seenHashes = new Set<string>();
+    for (const row of rows) {
+      if (seenHashes.has(row.content_hash)) continue;
+      seenHashes.add(row.content_hash);
+      representatives.push(row);
+    }
+    assignNearGroups(representatives, assignments);
     assignGroups(rows, (row) => normalizeLogicalName(row.name), 'name', assignments);
     this.database.sqlite.transaction(() => {
       this.database.sqlite.prepare('UPDATE skills SET duplicate_group = NULL, duplicate_kind = NULL').run();
@@ -415,10 +466,15 @@ export function inferIdentity(root: SkillRoot, skillPath: string): {
 } {
   const normalized = toPosixPath(skillPath).toLocaleLowerCase('en-US');
   let host: HostPlatform = root.host;
-  if (normalized.includes('/.claude/')) host = 'claude';
-  else if (normalized.includes('/.workbuddy/')) host = 'workbuddy';
-  else if (normalized.includes('/.codex/')) host = 'codex';
-  else if (normalized.includes('/.agents/')) host = 'codex';
+  // Only unclassified roots (custom / user-added) re-infer the host from path
+  // markers. Roots that already carry a specific tool host (trae, cursor, …)
+  // keep it: their skills live under that tool's own directory.
+  if (root.host === 'custom') {
+    if (normalized.includes('/.claude/')) host = 'claude';
+    else if (normalized.includes('/.workbuddy/')) host = 'workbuddy';
+    else if (normalized.includes('/.codex/')) host = 'codex';
+    else if (normalized.includes('/.agents/')) host = 'codex';
+  }
 
   let sourceType = root.sourceType;
   let scope = root.scope;
@@ -551,13 +607,21 @@ function normalizeSkillText(text: string): string {
     .toLocaleLowerCase('en-US');
 }
 
-function normalizeLogicalName(name: string): string {
-  return name.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/g, '-');
+export interface DuplicateCandidate {
+  id: string;
+  name: string;
+  content_hash: string;
+  normalized_content_hash: string;
 }
 
+/** Maximum pairwise comparisons kept per band bucket (see assignNearGroups). */
+export const NEAR_BUCKET_CAP = 50;
+/** Maximum simhash Hamming distance that still counts as a near match. */
+const NEAR_MAX_DISTANCE = 5;
+
 function assignGroups(
-  rows: Array<{ id: string; name: string; content_hash: string; normalized_content_hash: string }>,
-  keyOf: (row: { id: string; name: string; content_hash: string; normalized_content_hash: string }) => string,
+  rows: DuplicateCandidate[],
+  keyOf: (row: DuplicateCandidate) => string,
   kind: 'exact' | 'near' | 'name',
   assignments: Map<string, { kind: 'exact' | 'near' | 'name'; group: string }>
 ): void {
@@ -578,8 +642,23 @@ function assignGroups(
   }
 }
 
-function assignNearGroups(
-  rows: Array<{ id: string; name: string; content_hash: string; normalized_content_hash: string }>,
+interface NearBucketEntry {
+  id: string;
+  contentHash: string;
+  lo: number;
+  hi: number;
+}
+
+/**
+ * Banded LSH over the 64-bit normalized-content simhash. Each band bucket is
+ * capped: once a bucket holds NEAR_BUCKET_CAP rows, new rows stop comparing
+ * inside it (they still get up to three other band chances), which bounds the
+ * pairwise work instead of degrading to O(n²) on hot buckets full of similar
+ * Skills. Hashes are pre-split into two uint32 halves so the inner loop only
+ * runs XOR + popcount instead of allocating BigInts per pair.
+ */
+export function assignNearGroups(
+  rows: DuplicateCandidate[],
   assignments: Map<string, { kind: 'exact' | 'near' | 'name'; group: string }>
 ): void {
   const parent = new Map(rows.map((row) => [row.id, row.id]));
@@ -595,19 +674,25 @@ function assignNearGroups(
     const rightRoot = find(right);
     if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
   };
-  const buckets = new Map<string, typeof rows>();
+  const buckets = new Map<string, NearBucketEntry[]>();
   for (const row of rows) {
     const hash = row.normalized_content_hash.padStart(16, '0');
+    const lo = parseInt(hash.slice(0, 8), 16);
+    const hi = parseInt(hash.slice(8, 16), 16);
     for (let band = 0; band < 4; band += 1) {
       const key = `${band}:${hash.slice(band * 4, band * 4 + 4)}`;
-      const values = buckets.get(key) ?? [];
+      const values = buckets.get(key);
+      if (!values) {
+        buckets.set(key, [{ id: row.id, contentHash: row.content_hash, lo, hi }]);
+        continue;
+      }
+      if (values.length >= NEAR_BUCKET_CAP) continue;
       for (const candidate of values) {
-        if (candidate.content_hash !== row.content_hash && hammingDistance(hash, candidate.normalized_content_hash.padStart(16, '0')) <= 5) {
+        if (candidate.contentHash !== row.content_hash && hamming32(lo, hi, candidate.lo, candidate.hi) <= NEAR_MAX_DISTANCE) {
           union(row.id, candidate.id);
         }
       }
-      values.push(row);
-      buckets.set(key, values);
+      values.push({ id: row.id, contentHash: row.content_hash, lo, hi });
     }
   }
   const groups = new Map<string, string[]>();
@@ -622,6 +707,19 @@ function assignNearGroups(
     const group = `near-${sha256(ids.slice().sort().join(':')).slice(0, 12)}`;
     for (const id of ids) if (!assignments.has(id)) assignments.set(id, { kind: 'near', group });
   }
+}
+
+function hamming32(loLeft: number, hiLeft: number, loRight: number, hiRight: number): number {
+  return popcount32(loLeft ^ loRight) + popcount32(hiLeft ^ hiRight);
+}
+
+function popcount32(value: number): number {
+  let count = 0;
+  while (value > 0) {
+    value &= value - 1;
+    count += 1;
+  }
+  return count;
 }
 
 function simHash(text: string): string {
@@ -640,16 +738,6 @@ function simHash(text: string): string {
   let result = 0n;
   for (let bit = 0; bit < 64; bit += 1) if ((weights[bit] ?? 0) >= 0) result |= 1n << BigInt(bit);
   return result.toString(16).padStart(16, '0');
-}
-
-function hammingDistance(left: string, right: string): number {
-  let value = BigInt(`0x${left}`) ^ BigInt(`0x${right}`);
-  let distance = 0;
-  while (value > 0n) {
-    value &= value - 1n;
-    distance += 1;
-  }
-  return distance;
 }
 
 function fileKindOrder(kind: SkillFileEntry['kind']): number {

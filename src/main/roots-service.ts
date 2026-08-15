@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { HostPlatform, SkillRoot, SkillScope, SkillSourceType } from '../shared/types';
 import type { DatabaseContext } from './db/database';
 import { createId, localizeMessage, normalizeFsPath, nowIso, pathExists, type MessageTranslator } from './utils';
-import { AI_TOOL_LOCATIONS } from '../shared/ai-tool-catalog';
+import { AI_TOOL_LOCATIONS, FIRST_CLASS_HOSTS, toolHostKey } from '../shared/ai-tool-catalog';
 
 interface RootSeed {
   label: string;
@@ -39,16 +39,26 @@ export class RootsService {
       { label: '工作台回收站', path: path.join(this.userDataPath, 'trash'), host: 'custom', scope: 'system', sourceType: 'trash', writable: false, recursive: true, discovered: true, always: true }
     ];
 
+    const claimedSkillDirs = new Set<string>();
     for (const tool of AI_TOOL_LOCATIONS) {
+      const host = toolHostKey(tool.key) as HostPlatform;
+      // First-class hosts are seeded above, including tools that reuse their
+      // directories (Claude Code -> .claude, Cline/Warp -> .agents, TRAE CN).
+      if ((FIRST_CLASS_HOSTS as readonly string[]).includes(host)) continue;
       const detectPath = path.join(home, ...tool.detectDir.split('/'));
       const skillsPath = path.join(home, ...tool.skillsDir.split('/'));
       if (!(await pathExists(detectPath)) && !(await pathExists(skillsPath))) continue;
+      // Some catalog entries share one skills directory (e.g. ~/.config/agents/skills
+      // used by Amp, Kimi and Replit). First tool in catalog order claims it so a
+      // single path never flips between hosts on every startup.
+      if (claimedSkillDirs.has(tool.skillsDir)) continue;
+      claimedSkillDirs.add(tool.skillsDir);
       const isTraeBuiltin = tool.key === 'trae_cn_builtin' || tool.key === 'trae_cn_builtin_skills';
       const isTraePlugin = tool.key === 'trae_cn_plugins';
       seeds.push({
         label: `${tool.displayName} Skills`,
         path: skillsPath,
-        host: tool.key === 'codex' ? 'codex' : tool.key === 'claude_code' ? 'claude' : tool.key === 'workbuddy' ? 'workbuddy' : 'custom',
+        host,
         scope: isTraeBuiltin ? 'system' : isTraePlugin ? 'plugin' : 'user',
         sourceType: isTraeBuiltin ? 'builtin' : isTraePlugin ? 'plugin' : 'user',
         writable: !isTraeBuiltin && !isTraePlugin, recursive: true, discovered: true
@@ -128,6 +138,18 @@ function inferRootIdentity(rootPath: string): { host: HostPlatform } {
   if (normalized.includes('/.claude/')) return { host: 'claude' };
   if (normalized.includes('/.workbuddy/')) return { host: 'workbuddy' };
   if (normalized.includes('/.codex/') || normalized.includes('/.agents/')) return { host: 'codex' };
+  // Recognize any other known tool directory (e.g. ~/.trae/skills, ~/.cursor/skills)
+  // so manually added roots keep their platform identity too.
+  for (const tool of AI_TOOL_LOCATIONS) {
+    const host = toolHostKey(tool.key) as HostPlatform;
+    if ((FIRST_CLASS_HOSTS as readonly string[]).includes(host)) continue;
+    for (const marker of [tool.skillsDir, tool.detectDir]) {
+      const normalizedMarker = `/${marker.toLocaleLowerCase('en-US')}`;
+      if (normalized.endsWith(normalizedMarker) || normalized.includes(`${normalizedMarker}/`)) {
+        return { host };
+      }
+    }
+  }
   return { host: 'custom' };
 }
 

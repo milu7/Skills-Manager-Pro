@@ -1,7 +1,10 @@
 const path = require('node:path');
 const rules = require('./webpack.rules');
 
-module.exports = {
+// #12: production packages ship without source maps; development keeps them.
+// electron-forge's webpack plugin invokes this config as a function with
+// argv.mode = 'production' | 'development'.
+module.exports = (_env, argv) => ({
   entry: './src/main.ts',
   target: 'electron-main',
   module: { rules },
@@ -15,5 +18,5 @@ module.exports = {
     filename: 'index.js',
     path: path.resolve(__dirname, '.webpack/main')
   },
-  devtool: 'source-map'
-};
+  devtool: argv?.mode === 'production' ? false : 'source-map'
+});

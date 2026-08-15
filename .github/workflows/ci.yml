@@ -1,0 +1,47 @@
+# #11: continuous integration for the Windows-only build chain.
+# Runs the full verification chain on every push/PR: typecheck → vitest →
+# electron-forge package → installer startup regression → Playwright e2e.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Windows full check chain
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Electron and better-sqlite3 ship prebuilt binaries; cache them so
+      # repeated runs do not re-download (~100 MB) on every commit.
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LOCALAPPDATA }}/electron/Cache
+          key: electron-${{ hashFiles('package-lock.json') }}
+
+      # better-sqlite3 ships a Node-API prebuild per platform, so a compile is
+      # never needed. npm still tries to build it during `npm ci` because the
+      # tarball contains a binding.gyp, and that requires a Visual Studio C++
+      # toolchain. The GitHub runner's VS 18 is not recognized by the pinned
+      # @electron/node-gyp ("unsupported version: 18"), so the build fails.
+      # --ignore-scripts skips that pointless compile; the prebuilds are files
+      # in the tarball and survive the flag. forge downloads Electron itself
+      # via @electron/get, and the installer-startup/e2e checks use the
+      # packaged app, so no project lifecycle script is actually needed here.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Full check chain (typecheck, vitest, package, installer startup, e2e)
+        run: npm run check

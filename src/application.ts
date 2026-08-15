@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, protocol, session, shell } from 'electron';
 import path from 'node:path';
 import { AiService } from './main/ai-service';
 import { closeDatabase, openDatabase } from './main/db/database';
@@ -20,6 +20,7 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 let mainWindow: BrowserWindow | null = null;
 let disposeIpc: (() => void) | null = null;
 let watcher: WatchService | null = null;
+let initialScanTimer: NodeJS.Timeout | null = null;
 
 // Keep Chromium storage, SQLite, logs and caches under the same overridable
 // userData root. This makes tests and portable diagnostics genuinely isolated.
@@ -63,6 +64,8 @@ app.whenReady().then(async () => {
   const notes = new NoteService(database, translate);
   const ai = new AiService(database, repository, operations, providers, () => settings.resolvedLocale, translate);
   watcher = new WatchService(scanner);
+  // #9: serve note images by id over the custom scheme before the window loads.
+  protocol.handle('skill-note-image', (request) => notes.handleImageRequest(request));
 
   mainWindow = createWindow(localization);
   disposeIpc = registerIpc({
@@ -73,7 +76,7 @@ app.whenReady().then(async () => {
   // File watching and a full refresh are background work. The cached catalog
   // should be interactive before either task starts touching large skill trees.
   void watcher.reset(roots.list()).catch((error) => console.warn('Skill watcher failed to start:', error));
-  setTimeout(() => void scanner.scanAll(), 250);
+  initialScanTimer = setTimeout(() => void scanner.scanAll(), 250);
 });
 
 app.on('window-all-closed', () => {
@@ -81,6 +84,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // #17: clear the pending initial scan so a fast quit does not start a
+  // full rescan after the database is closed.
+  if (initialScanTimer) {
+    clearTimeout(initialScanTimer);
+    initialScanTimer = null;
+  }
   disposeIpc?.();
   disposeIpc = null;
   void watcher?.close();

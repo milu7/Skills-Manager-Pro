@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { DiagnosticSeverity, HostPlatform, SkillDiagnostic, SkillHealth } from '../../shared/types';
 import { UNTERMINATED_FRONTMATTER_ERROR, type ParsedSkillDocument } from '../skill-document';
+import { normalizeLogicalName } from '../utils';
 
 export const INITIAL_CATEGORIES = [
   '写作内容',
@@ -80,7 +81,7 @@ export function analyzeDocument(input: AnalyzeDocumentInput): SkillDiagnostic[] 
   }
   if (!name) {
     diagnostics.push({ code: 'name-missing', severity: 'error', title: '缺少内部名称', message: '未找到 name 字段。' });
-  } else if (normalizeName(name) !== normalizeName(input.folderName)) {
+  } else if (normalizeLogicalName(name) !== normalizeLogicalName(input.folderName)) {
     diagnostics.push({
       code: 'name-folder-mismatch',
       severity: 'warning',
@@ -178,10 +179,6 @@ export function severityRank(severity: DiagnosticSeverity): number {
 
 export function stringValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizeName(value: string): string {
-  return value.trim().toLocaleLowerCase('en-US').replace(/[\s_]+/g, '-');
 }
 
 function formatBytes(bytes: number): string {

@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { BatchAiDialog } from './BatchAiDialog';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { translatedCategory, translatedHost, translatedSource } from '../i18n';
+import { isToolHost, translatedCategory, translatedHost, translatedSource } from '../i18n';
 
 export function SkillList() {
   const { t } = useTranslation();
@@ -89,7 +89,7 @@ function SkillRow({ skill, selected, onClick }: { skill: SkillInstallation; sele
         <div className="skill-title-line"><strong>{skill.displayName}</strong>{!skill.writable && <LockKeyhole size={12} />}{skill.duplicateKind && <Copy size={12} />}</div>
         <p>{skill.description || t('workbench:list.noDescription')}</p>
         <div className="skill-meta-line">
-          <span className={`platform-text platform-${skill.host}`}>{translatedHost(t, skill.host)}</span>
+          <span className={clsx('platform-text', `platform-${skill.host}`, isToolHost(skill.host) && 'is-tool')}>{translatedHost(t, skill.host)}</span>
           <i />
           <span>{translatedSource(t, skill.sourceType)}</span>
           <i />

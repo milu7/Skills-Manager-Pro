@@ -1,6 +1,6 @@
 import { Bot, CheckCircle2, ChevronRight, CircleGauge, FileLock2, LoaderCircle, RefreshCw, Send, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { AiAnalysis, AiInputPreview, SkillDetails } from '../../shared/types';
+import type { AiAnalysis, AiAttachmentReason, AiInputPreview, SkillDetails } from '../../shared/types';
 import { readableError, useWorkbenchStore } from '../store';
 import { Modal, StatusPill, formatBytes, formatDate } from './common';
 import { useTranslation } from 'react-i18next';
@@ -108,12 +108,17 @@ function AnalysisList({ title, items, warning }: { title: string; items: string[
   return <div className="analysis-list"><h4>{warning && <TriangleAlert size={14} />}{title}</h4>{items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p>{t('status.none')}</p>}</div>;
 }
 
-function translateAttachmentReason(t: ReturnType<typeof useTranslation>['t'], reason: string): string {
-  const key = reason === '单文件超过 200 KB，不能发送' ? 'singleLarge'
-    : reason === '宿主 UI 元数据，可选发送' ? 'hostMetadata'
-      : reason === '文本附件，由你确认后发送' ? 'textAttachment'
-        : reason === '脚本永不发送' ? 'scriptNever'
-          : reason === '二进制文件永不发送' ? 'binaryNever'
-            : reason === '超过 200 KB 上限' ? 'overLimit' : null;
-  return key ? t(`messages:attachment.${key}`) : reason;
+const ATTACHMENT_REASON_KEYS: Record<AiAttachmentReason, string> = {
+  'file-too-large': 'singleLarge',
+  'host-metadata': 'hostMetadata',
+  'text-attachment': 'textAttachment',
+  'script-never': 'scriptNever',
+  'binary-never': 'binaryNever',
+  'over-limit': 'overLimit'
+};
+
+// #15: reasons are stable enum codes from the main process; only the display
+// text is localized here.
+function translateAttachmentReason(t: ReturnType<typeof useTranslation>['t'], reason: AiAttachmentReason): string {
+  return t(`messages:attachment.${ATTACHMENT_REASON_KEYS[reason]}`);
 }

@@ -70,7 +70,7 @@ The app is not code-signed yet, so Windows may show a publisher or SmartScreen w
 
 ## Local-first data and safety
 
-- Your Skill files remain at their original paths. SMP stores a local index, categories, tags, snapshots, history, and optional AI results in `%APPDATA%\Skill 管理工作台`.
+- Your Skill files remain at their original paths. SMP stores a local index, categories, tags, snapshots, history, and optional AI results in `%APPDATA%\Skills Manager Pro`.
 - User and project sources can be editable; plugin, built-in, marketplace, cache, and backup sources are protected by default.
 - A save presents a diff, creates a snapshot, and uses a same-directory temporary file with atomic replacement. A changed-on-disk hash blocks accidental overwrite.
 - Managed removal goes to the workspace recycle bin; there is no permanent-delete entry point in the app.

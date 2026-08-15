@@ -26,9 +26,8 @@ let watcher: WatchService | null = null;
 if (process.env.SKILL_WORKBENCH_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.SKILL_WORKBENCH_USER_DATA));
 } else {
-  // Renaming the product must not strand an existing catalog in a new folder.
-  // Keep the established storage location while the visible product name evolves.
-  app.setPath('userData', path.join(app.getPath('appData'), 'Skill 管理工作台'));
+  // Keep the default data directory aligned with the English product name.
+  app.setPath('userData', path.join(app.getPath('appData'), 'Skills Manager Pro'));
 }
 
 if (process.platform === 'win32') {
